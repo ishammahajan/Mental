@@ -1,0 +1,8 @@
+{
+  "name": "Remix: SPeakUp",
+  "description": "A privacy-first mental health ecosystem for SPJIMR, featuring SParsh AI.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
+}
