@@ -1,14 +1,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Message, AgentAnalysis, WellnessTask } from "../types";
 import * as db from './storage';
+import { handleBookingRequest } from './bookingAgent';
 
 // ---------------------------------------------------------
 // API KEY MANAGEMENT
 // The application requires a valid API_KEY.
 // If your token expired, generate a new one at aistudio.google.com
 // ---------------------------------------------------------
-const apiKey = process.env.API_KEY || ''; 
-const ai = new GoogleGenAI({ apiKey });
+const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || ''; 
+
+let ai: GoogleGenAI | undefined;
+
+if (apiKey) {
+  ai = new GoogleGenAI({ apiKey });
+} else {
+  console.error("GEMINI_API_KEY is not set in sentimentAgent. AI services will be unavailable.");
+}
+
 
 /**
  * THE AUTONOMOUS GUARDIAN (SLM)
@@ -41,7 +50,8 @@ export const analyzeSentimentAndSchedule = async (
         1. If user mentions insomnia, panic, or restlessness -> ASSIGN_EXERCISE (e.g., "4-7-8 Breathing").
         2. If user mentions "need to talk", "overwhelmed", or sustained distress -> SUGGEST_BOOKING.
         3. If user mentions self-harm, ending it, or extreme hopelessness -> TRIGGER_SOS.
-        4. Otherwise -> NONE.
+        4. If user asks to book a slot, schedule an appointment, or similar -> BOOK_SLOT.
+        5. Otherwise -> NONE.
         
         CONVERSATION LOG:
         ${conversationLog}
@@ -53,7 +63,7 @@ export const analyzeSentimentAndSchedule = async (
           properties: {
             sentimentScore: { type: Type.NUMBER, description: "0 (Worst) to 100 (Best)" },
             riskLevel: { type: Type.STRING, enum: ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'] },
-            recommendedAction: { type: Type.STRING, enum: ['NONE', 'SUGGEST_BOOKING', 'ASSIGN_EXERCISE', 'TRIGGER_SOS'] },
+            recommendedAction: { type: Type.STRING, enum: ['NONE', 'SUGGEST_BOOKING', 'ASSIGN_EXERCISE', 'TRIGGER_SOS', 'BOOK_SLOT'] },
             specificExercise: { type: Type.STRING, description: "Name of exercise if applicable" },
             reasoning: { type: Type.STRING }
           }
@@ -102,6 +112,21 @@ export const analyzeSentimentAndSchedule = async (
                 taskName: analysis.specificExercise
             }
         };
+    }
+
+    // ACTION 3: SUGGEST BOOKING (Connection)
+    if (analysis.recommendedAction === 'BOOK_SLOT') {
+        const lastUserMessage = recentMessages.filter(m => m.role === 'user').pop();
+        if (lastUserMessage) {
+            const bookingResponse = await handleBookingRequest(userId, userEmail, lastUserMessage.text);
+            return {
+                id: Date.now().toString(),
+                role: 'agent',
+                text: bookingResponse,
+                timestamp: new Date(),
+                metadata: { type: 'booking_confirmation' }
+            };
+        }
     }
 
     // ACTION 3: SUGGEST BOOKING (Connection)

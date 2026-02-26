@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as storage from '../services/storage';
 import { encryptData, decryptData } from '../utils/encryption';
 import { sendMessageToSParsh } from '../services/geminiService';

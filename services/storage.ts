@@ -1,4 +1,4 @@
-import { User, Role, Message, AppointmentSlot, WellnessTask, WellnessLeave, JournalEntry, P2PMessage } from '../types';
+import { User, Role, Message, AppointmentSlot, WellnessTask, WellnessLeave, JournalEntry, P2PMessage, ConsentData } from '../types';
 import { encryptData, decryptData } from '../utils/encryption';
 import { MOCK_SLOTS } from '../constants';
 
@@ -6,9 +6,10 @@ const CLOUD_KEYS = {
   USERS: 'speakup_cloud_users',
   CHATS: 'speakup_cloud_chats',
   TASKS: 'speakup_cloud_tasks',
-  LEAVES: 'speakup_cloud_leaves',
+
   SLOTS: 'speakup_cloud_slots',
   JOURNALS: 'speakup_cloud_journals',
+  CONSENTS: 'speakup_cloud_consents',
   P2P_MSGS: 'speakup_cloud_p2p_msgs'
 };
 
@@ -27,13 +28,42 @@ const cloudSet = (key: string, data: any) => {
 };
 
 // --- Auth ---
+export const getUser = async (userId: string): Promise<User | null> => {
+  await networkDelay();
+  const users = cloudGet<User[]>(CLOUD_KEYS.USERS, []);
+  return users.find(u => u.id === userId) || null;
+};
+
+export const updateUser = async (userId: string, updatedDetails: Partial<User>) => {
+  await networkDelay();
+  const users = cloudGet<User[]>(CLOUD_KEYS.USERS, []);
+  const userIndex = users.findIndex(u => u.id === userId);
+  if (userIndex !== -1) {
+    users[userIndex] = { ...users[userIndex], ...updatedDetails };
+    cloudSet(CLOUD_KEYS.USERS, users);
+  }
+};
+
+const generateCasefileId = () => {
+  const prefix = 'SPJ';
+  const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
+  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${prefix}-${timestamp}-${random}`;
+};
+
+export const getAllUsers = async (): Promise<User[]> => {
+  await networkDelay();
+  return cloudGet<User[]>(CLOUD_KEYS.USERS, []);
+};
+
 export const loginOrRegisterUser = async (email: string, role: Role): Promise<User> => {
   await networkDelay();
   const users = cloudGet<User[]>(CLOUD_KEYS.USERS, []);
   let user = users.find(u => u.email === email);
-  if (!user) {
+    if (!user) {
     user = {
       id: crypto.randomUUID(),
+      casefileId: generateCasefileId(),
       name: email.split('@')[0].replace('.', ' '),
       email,
       role,
@@ -217,18 +247,27 @@ export const toggleTaskCompletion = async (studentEmail: string, taskId: string)
   cloudSet(CLOUD_KEYS.TASKS, allTasks);
 };
 
-// --- Leaves ---
-export const issueLeave = async (studentEmail: string, leave: WellnessLeave) => {
+
+
+// --- Wellness Leave ---
+export const getActiveLeave = async (studentId: string): Promise<WellnessLeave | null> => {
     await networkDelay();
-    const leaves = cloudGet<Record<string, WellnessLeave>>(CLOUD_KEYS.LEAVES, {});
-    leaves[studentEmail] = leave;
-    cloudSet(CLOUD_KEYS.LEAVES, leaves);
+    const allLeaves = cloudGet<WellnessLeave[]>('speakup_cloud_leaves', []);
+    return allLeaves.find(l => l.studentId === studentId && l.status === 'approved') || null;
 };
 
-export const getActiveLeave = async (studentEmail: string): Promise<WellnessLeave | null> => {
+// --- Consents ---
+export const saveConsent = async (consent: ConsentData) => {
     await networkDelay();
-    const leaves = cloudGet<Record<string, WellnessLeave>>(CLOUD_KEYS.LEAVES, {});
-    return leaves[studentEmail] || null;
+    const allConsents = cloudGet<Record<string, ConsentData>>(CLOUD_KEYS.CONSENTS, {});
+    allConsents[consent.slotId] = consent;
+    cloudSet(CLOUD_KEYS.CONSENTS, allConsents);
+};
+
+export const getConsentForSlot = async (slotId: string): Promise<ConsentData | null> => {
+    await networkDelay();
+    const allConsents = cloudGet<Record<string, ConsentData>>(CLOUD_KEYS.CONSENTS, {});
+    return allConsents[slotId] || null;
 };
 
 // --- Journal ---

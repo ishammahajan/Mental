@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Role } from '../types';
+import { Role, User } from '../types';
 import { loginOrRegisterUser } from '../services/storage';
 
 interface Props {
-  onLogin: (role: Role, email: string, userId: string) => void;
+  onLogin: (user: User) => void;
 }
 
 const LoginScreen: React.FC<Props> = ({ onLogin }) => {
@@ -14,7 +14,22 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
 
   const handleSplashClick = () => setStep('form');
 
-  const handleLogin = async (e: React.FormEvent) => {
+    const handleQuickLogin = async (email: string, role: Role) => {
+    setIsAuthenticating(true);
+    setError('');
+    try {
+        const user = await loginOrRegisterUser(email, role);
+        setTimeout(() => {
+            onLogin(user);
+            setIsAuthenticating(false);
+        }, 800);
+    } catch (err) {
+        setError("Authentication failed. Please try again.");
+        setIsAuthenticating(false);
+    }
+  };
+
+    const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -44,7 +59,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         
         // Simulate Network Delay
         setTimeout(() => {
-            onLogin(user.role, user.email, user.id);
+            onLogin(user);
             setIsAuthenticating(false);
         }, 800);
 
@@ -110,10 +125,12 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         </form>
         
         <div className="mt-8 text-center text-xs text-slate-400">
-          <p>Format Guide:</p>
-          <p>Student: program.name@spjimr.org</p>
-          <p>Counselor: name@spjimr.org</p>
-          <p>Admin: admin@spjimr.org</p>
+          <p className="font-bold mb-2">Quick Sign-in</p>
+          <div className="flex justify-center gap-2">
+            <button onClick={() => handleQuickLogin('pgp25.govardhan@spjimr.org', 'student')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Student</button>
+            <button onClick={() => handleQuickLogin('dimple.wagle@spjimr.org', 'counselor')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Counselor</button>
+            <button onClick={() => handleQuickLogin('admin@spjimr.org', 'admin')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Admin</button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,24 +1,40 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Send, Calendar, BookOpen, Activity, Home, CheckSquare, Heart, Lock, User as UserIcon, LogOut, MessageSquare, XCircle, AlertCircle, Cloud, Sparkles, Key, CheckCircle } from 'lucide-react';
+import { Mic, Send, Calendar, BookOpen, Activity, Home, CheckSquare, Heart, Lock, User as UserIcon, LogOut, MessageSquare, XCircle, AlertCircle, Cloud, Sparkles, Key, CheckCircle, Download } from 'lucide-react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import SParshAvatar from './SParshAvatar';
+import ProfileDropdown from './ProfileDropdown';
+import EditProfileModal from './EditProfileModal';
 import EnvironmentWidget from './EnvironmentWidget';
 import { sendMessageToSParsh } from '../services/geminiService';
 import { analyzeSentimentAndSchedule } from '../services/sentimentAgent';
-import { Message, WellnessTask, WellnessLeave, AppointmentSlot, JournalEntry, P2PMessage } from '../types';
+import { Message, WellnessTask, AppointmentSlot, JournalEntry, P2PMessage, ConsentData, User } from '../types';
+import ConsentForm from './ConsentForm';
 import * as db from '../services/storage';
 import { useSParsh } from '../contexts/SParshContext';
+import { useNotification } from '../contexts/NotificationContext';
+import { getUser, updateUser } from '../services/storage';
 
 interface Props {
   triggerCrisis: () => void;
   userEmail: string;
   userId: string;
+  user: User;
 }
 
-const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId }) => {
+const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, user: initialUser }) => {
+  const { addNotification } = useNotification();
+  const [user, setUser] = useState<User>(initialUser);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const { setVibe, setAvatarState } = useSParsh();
+
+  const studentName = (() => {
+    const namePart = userEmail.split('.')[1]?.split('@')[0];
+    if (!namePart) return 'Student';
+    return namePart.charAt(0).toUpperCase() + namePart.slice(1);
+  })();
   
-  const [activeTab, setActiveTab] = useState<'home' | 'journal' | 'tasks' | 'booking'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'tasks' | 'booking'>('home');
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -34,11 +50,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
 
   // Dynamic Data States
   const [tasks, setTasks] = useState<WellnessTask[]>([]);
-  const [activeLeave, setActiveLeave] = useState<WellnessLeave | null>(null);
+
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
-  const [journals, setJournals] = useState<JournalEntry[]>([]);
-  const [journalText, setJournalText] = useState('');
-  const [isSaved, setIsSaved] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot | null>(null);
+
 
 
   // P2P Chat States
@@ -47,15 +63,16 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
   const [p2pInput, setP2PInput] = useState('');
 
   // Load Data
+  
+
   useEffect(() => {
     const loadData = async () => {
         setIsCloudSyncing(true);
         const history = await db.getChatHistory(userId);
         setMessages(history);
         setTasks(await db.getTasks(userEmail));
-        setActiveLeave(await db.getActiveLeave(userEmail));
+
         setSlots(await db.getSlots());
-        setJournals(await db.getJournals(userId));
         setIsCloudSyncing(false);
     };
     loadData();
@@ -72,16 +89,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => scrollToBottom(), [messages]);
 
-  // Effect to load today's journal entry when component mounts or journals are updated
-  useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayEntry = journals.find(j => j.date.startsWith(todayStr));
-    if (todayEntry) {
-      setJournalText(todayEntry.encryptedText);
-    } else {
-      setJournalText(''); // Clear for a new day if no entry found
-    }
-  }, [journals]);
+
 
   const processMessageSend = async (textToSend: string) => {
       setAvatarState('listening');
@@ -124,6 +132,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
          if (agentMsg) {
              if (agentMsg.metadata?.type === 'crisis_trigger') triggerCrisis();
              if (agentMsg.metadata?.type === 'task_assignment') setTasks(await db.getTasks(userEmail));
+             if (agentMsg.metadata?.type === 'booking_confirmation') setSlots(await db.getSlots());
              setMessages(prev => [...prev, agentMsg]);
              await db.saveChatMessage(userId, agentMsg);
          }
@@ -152,49 +161,91 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
     await db.toggleTaskCompletion(userEmail, id);
   };
 
-  const handleBookSlot = async (slotId: string, messageId?: string) => {
+  const handleBookSlot = (slot: AppointmentSlot) => {
+    setSelectedSlot(slot);
+    setShowConsentModal(true);
+  };
+
+    const handleConsentSubmit = async (signature: string | File, mobile?: string) => {
+    if (mobile) {
+      await handleProfileSave({ mobile });
+    }
+    if (!selectedSlot) return;
+
+    let signatureData = '';
+    if (signature instanceof File) {
+      const reader = new FileReader();
+      reader.readAsDataURL(signature);
+      reader.onload = async () => {
+        signatureData = reader.result as string;
+        await completeBooking(signatureData);
+      };
+    } else {
+      signatureData = signature;
+      await completeBooking(signatureData);
+    }
+  };
+
+  const completeBooking = async (signatureData: string) => {
+    if (!selectedSlot) return;
+
+    const consent: Omit<ConsentData, 'counselorSignature' | 'counselorSignDate' | 'counselorId' | 'counselorName'> = {
+      slotId: selectedSlot.id,
+      studentId: userId,
+      studentName: studentName,
+      studentSignature: signatureData,
+      studentSignDate: new Date().toISOString(),
+    };
+
+    await db.saveConsent(consent as ConsentData);
+
     setIsCloudSyncing(true);
-    const userName = userEmail.split('@')[0].replace('.', ' ');
-    const success = await db.requestSlot(slotId, userId, userName);
+    const success = await db.requestSlot(selectedSlot.id, userId, studentName);
     setIsCloudSyncing(false);
 
-    if (messageId) {
-        const newType = success ? 'booking_request_sent' : 'booking_slot_taken';
-        setMessages(prevMessages => 
-            prevMessages.map(msg => 
-                msg.id === messageId ? { ...msg, metadata: { ...msg.metadata, type: newType } } : msg
-            )
-        );
+    if (success) {
+      setSlots(await db.getSlots());
+      addNotification('Slot requested successfully!', 'success');
+    } else {
+      addNotification('Failed to request slot.', 'error');
     }
-    if (success) setSlots(await db.getSlots());
+
+    setShowConsentModal(false);
+    setSelectedSlot(null);
+  }
+
+    const handleDownloadConsent = async (slotId: string) => {
+    const consent = await db.getConsentForSlot(slotId);
+    if (consent) {
+      const blob = new Blob([JSON.stringify(consent, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `consent-form-${consent.studentName.replace(/ /g, '_')}-${consent.slotId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   const handleCancelSlot = async (slotId: string) => {
+      addNotification('Slot booking cancelled', 'info');
       setIsCloudSyncing(true);
       await db.updateSlotStatus(slotId, 'open');
       setSlots(await db.getSlots());
       setIsCloudSyncing(false);
   };
 
-  const handleSaveJournal = async () => {
-    if (!journalText.trim() || isSaved) return;
-    setIsCloudSyncing(true);
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const existingEntry = journals.find(j => j.date.startsWith(todayStr));
 
-    const entryToSave: JournalEntry = {
-      id: existingEntry ? existingEntry.id : crypto.randomUUID(),
-      date: new Date().toISOString(),
-      encryptedText: journalText,
-    };
-
-    await db.saveJournal(userId, entryToSave);
-    setJournals(await db.getJournals(userId)); // Refresh journal list
-    setIsCloudSyncing(false);
-
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2000);
+    const handleProfileSave = async (updatedDetails: Partial<User>) => {
+    await updateUser(user.id, updatedDetails);
+    const updatedUser = await getUser(user.id);
+    if (updatedUser) {
+      setUser(updatedUser);
+    }
+    setShowEditProfileModal(false);
   };
 
   const handleP2PSend = async () => {
@@ -222,40 +273,39 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
   ];
 
   return (
-    <div className="h-full flex flex-col max-w-md mx-auto relative overflow-hidden bg-[#E6DDD0]">
-      
-      {/* Header */}
-      <div className="px-6 py-6 flex justify-between items-center bg-[#E6DDD0] z-10 relative">
-        <div>
-          <h2 className="text-xl font-bold text-[#708090]">Hi, {userEmail.split('.')[1]?.split('@')[0] || 'Student'}</h2>
-          <div className="flex items-center gap-2 mt-1">
-             {activeLeave?.isActive && (
-                <span className="bg-[#8A9A5B] text-white text-[10px] px-2 py-1 rounded-full animate-pulse">On Wellness Leave</span>
-             )}
-             {isCloudSyncing && (
-                 <span className="flex items-center gap-1 text-[10px] text-blue-500 font-bold animate-pulse">
-                     <Cloud size={10} /> Syncing...
-                 </span>
-             )}
+    <div className="min-h-screen flex flex-col bg-[#E6DDD0]">
+      {/* Top Header */}
+      <div className="w-full bg-[#DCD4C4] p-4 flex justify-between items-center shadow-md z-20">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-[#8A9A5B] flex items-center justify-center text-white font-bold text-xl">
+            SU
+          </div>
+          <div>
+            <h1 className="font-bold text-lg text-[#708090]">SpeakUp</h1>
+            <p className="text-sm text-slate-500">Hi, {studentName}</p>
           </div>
         </div>
-        <div className="flex gap-2 relative">
-             <button onClick={() => setShowP2P(true)} className="neu-icon-btn p-3 rounded-full text-[#708090]">
-                 <MessageSquare size={20} />
-             </button>
-             <button onClick={() => setShowProfile(!showProfile)} className="neu-icon-btn p-3 rounded-full text-[#8A9A5B]">
-                <UserIcon size={20} />
-             </button>
-             
-             {showProfile && (
-                 <div className="absolute top-12 right-0 bg-white rounded-xl shadow-xl p-2 w-40 z-50 animate-in fade-in zoom-in duration-200">
-                     <button onClick={() => window.location.reload()} className="w-full text-left px-4 py-2 text-red-500 text-sm font-bold flex items-center gap-2 hover:bg-gray-100 rounded-lg">
-                         <LogOut size={14}/> Logout
-                     </button>
-                 </div>
-             )}
+        <div className="flex items-center gap-4">
+          <button onClick={() => setShowP2P(true)} className="neu-icon-btn p-3 rounded-full text-[#708090]">
+            <MessageSquare size={20} />
+          </button>
+                    <ProfileDropdown 
+            user={user} 
+            onEditProfile={() => setShowEditProfileModal(true)} 
+            onLogout={() => window.location.reload()} 
+          />
         </div>
       </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar Navigation */}
+        <div className="w-64 bg-[#DCD4C4] p-6 flex-col hidden md:flex">
+          <div className="space-y-4">
+            <button onClick={() => setActiveTab('home')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'home' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><Home size={20} /> Home</button>
+            <button onClick={() => setActiveTab('tasks')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'tasks' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><CheckSquare size={20} /> Tasks</button>
+            <button onClick={() => setActiveTab('booking')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'booking' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><Calendar size={20} /> Slot Booking</button>
+          </div>
+        </div>
 
       {/* API Error Banner - Handles Token Expiry */}
       {apiError && (
@@ -287,80 +337,24 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
               </div>
               <div className="p-4 bg-white/50">
                   <div className="flex gap-2">
-                      <input type="text" value={p2pInput} onChange={e => setP2PInput(e.target.value)} placeholder="Type a message..." className="flex-1 p-2 rounded-lg border border-gray-300 outline-none" />
+                                            <input type="text" value={p2pInput} onChange={e => setP2PInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleP2PSend()} placeholder="Type a message..." className="flex-1 p-2 rounded-lg border border-gray-300 outline-none" />
                       <button onClick={handleP2PSend} className="bg-[#8A9A5B] text-white p-2 rounded-lg"><Send size={18}/></button>
                   </div>
               </div>
           </div>
       )}
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto pb-32 px-4 scrollbar-hide">
-        
+      {/* Main Content */}
+      <div className="flex-1 p-6 overflow-y-auto scrollbar-hide">
         {activeTab === 'home' && (
-          <>
-             <EnvironmentWidget variant="student" />
-            <SParshAvatar />
-            
-            <div className="space-y-4 mb-8 min-h-[200px]">
-               {messages.length === 0 && (
-                 <div className="text-center text-[#708090]/60 italic mt-[-20px] mb-4">
-                   "Your chat history is encrypted in the cloud. How are you feeling right now?"
-                 </div>
-               )}
-               {messages.map(msg => (
-                 <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                   
-                   {msg.role === 'agent' ? (
-                       <div className="w-[85%] bg-white border border-[#8A9A5B] p-4 rounded-xl shadow-lg animate-in slide-in-from-left duration-500 mb-2">
-                           <div className="flex items-center gap-2 mb-2 text-[#8A9A5B] font-bold text-xs">
-                               <Sparkles size={12}/> SParsh Guardian
-                           </div>
-                           <p className="text-sm text-slate-600 mb-3">{msg.text}</p>
-                           
-                           {msg.metadata?.type === 'booking_suggestion' && msg.metadata.slotId && (
-                               <button 
-                                 onClick={() => handleBookSlot(msg.metadata!.slotId!, msg.id)}
-                                 className="w-full bg-[#8A9A5B] text-white py-2 rounded-lg text-xs font-bold hover:bg-[#728248] transition-colors flex items-center justify-center gap-2 active:scale-95">
-                                 <Calendar size={12}/> Book: {msg.metadata.slotTime}
-                               </button>
-                           )}
-                            {msg.metadata?.type === 'booking_request_sent' && (<div className="w-full bg-yellow-50 text-yellow-700 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-yellow-200"><CheckCircle size={14} /> Request Sent! View in Booking tab.</div>)}
-                            {msg.metadata?.type === 'booking_slot_taken' && (<div className="w-full bg-red-100 text-red-700 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-red-200"><XCircle size={14} /> This slot was already taken.</div>)}
-                           {msg.metadata?.type === 'task_assignment' && (<div className="w-full bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-blue-100"><CheckSquare size={12}/> Task Added: {msg.metadata.taskName}</div>)}
-                       </div>
-                   ) : (
-                       <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed
-                         ${msg.role === 'user' ? 'bg-[#8A9A5B] text-white rounded-br-none shadow-md' : 'neu-flat text-[#708090] rounded-bl-none'}`}>
-                         {msg.text}
-                       </div>
-                   )}
-                 </div>
-               ))}
-               {isLoading && <div className="text-center text-xs text-slate-400 animate-pulse">SParsh is listening...</div>}
-               <div ref={messagesEndRef} />
-            </div>
-
-            <div className="neu-pressed rounded-full p-2 flex items-center pr-2 mb-6">
-               <input 
-                 type="text" value={inputText} onChange={(e) => setInputText(e.target.value)}
-                 onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="Speak to SParsh..."
-                 className="flex-1 bg-transparent border-none outline-none px-4 text-[#708090] placeholder-slate-400"
-               />
-               <button onClick={handleSend} className="bg-[#8A9A5B] text-white p-2 rounded-full shadow-md"><Send size={18} /></button>
-            </div>
-
-            <div className="flex items-center gap-1 justify-center mb-6 text-[10px] text-slate-400">
-                <Lock size={10} /> End-to-End Encrypted Cloud Storage
-                {isFallbackMode && <span className="ml-2 text-orange-500 font-bold flex items-center gap-1"> <AlertCircle size={10}/> Fallback Model Active</span>}
-            </div>
-
-            <div className="neu-pressed rounded-3xl p-6 mb-6">
+          <div className="w-full">
+            <EnvironmentWidget variant="student" />
+            <div className="neu-pressed rounded-3xl p-6 mt-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-[#708090] flex items-center gap-2"><Activity size={16}/> Workload Meter</h3>
                 <span className="text-xs bg-[#CC5500]/10 text-[#CC5500] px-2 py-1 rounded-full">Peak Load</span>
               </div>
-              <div className="h-32 w-full">
+              <div className="h-48 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={data}>
                     <Tooltip />
@@ -369,18 +363,13 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
                 </ResponsiveContainer>
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {activeTab === 'tasks' && (
            <div className="animate-in slide-in-from-bottom-10 duration-500 space-y-6">
              <h2 className="text-2xl font-bold text-[#708090]">Wellness Routines</h2>
-             {activeLeave?.isActive && (
-                <div className="neu-flat p-6 rounded-2xl border-l-4 border-[#8A9A5B]">
-                   <h3 className="text-lg font-bold text-[#8A9A5B] mb-1">Wellness Leave Active</h3>
-                   <p className="text-xs text-[#708090] mb-4">Issued by {activeLeave.issuedBy} until {activeLeave.expiryDate}</p>
-                </div>
-             )}
+
              {tasks.length === 0 && <p className="text-center text-slate-400 mt-10">No tasks assigned yet.</p>}
              <div className="space-y-4">
                {tasks.map(task => (
@@ -398,28 +387,26 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
            </div>
         )}
 
-        {activeTab === 'journal' && (
-          <div className="animate-in slide-in-from-bottom-10 duration-500">
-             <h3 className="text-xl font-bold text-[#708090] mb-6">Daily Reflections</h3>
-             <div className="neu-pressed rounded-2xl p-4 h-80 flex flex-col">
-               <textarea 
-                value={journalText}
-                onChange={(e) => setJournalText(e.target.value)}
-                placeholder="Pour it out here. It's encrypted..." 
-                className="w-full h-full bg-transparent border-none outline-none text-[#708090] placeholder-slate-400 resize-none flex-1"
-               />
-             </div>
-             <div className="flex justify-end mt-4">
-                <button 
-                    onClick={handleSaveJournal} 
-                    disabled={!journalText.trim() || isSaved}
-                    className={`w-full bg-[#8A9A5B] text-white px-6 py-3 rounded-full shadow-lg text-sm active:scale-95 transition-all flex items-center justify-center gap-2 font-bold ${isSaved ? 'bg-green-500' : 'bg-[#8A9A5B]'}`}
-                >
-                    {isSaved ? <><CheckCircle size={16}/> Saved!</> : "Encrypt & Save"}
-                </button>
-             </div>
-          </div>
-        )}
+
+
+      {showConsentModal && selectedSlot && (
+        <ConsentForm 
+          role="student"
+          studentName={studentName}
+          program="PGDM"
+          onClose={() => setShowConsentModal(false)}
+                    onSubmit={handleConsentSubmit}
+          user={user}
+        />
+      )}
+
+              {showEditProfileModal && (
+        <EditProfileModal 
+          user={user} 
+          onClose={() => setShowEditProfileModal(false)} 
+          onSave={handleProfileSave} 
+        />
+      )}
 
         {activeTab === 'booking' && (
           <div className="animate-in slide-in-from-right-10 duration-500 space-y-4">
@@ -447,28 +434,71 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId })
                       <div className="text-sm text-slate-400">{slot.date} • {slot.time}</div>
                       {statusText && <div className="text-[10px] uppercase font-bold text-slate-500 mt-1">{statusText}</div>}
                     </div>
-                    <button 
-                      disabled={slot.status !== 'open' && !isMyBooking} 
-                      onClick={() => {
-                          if (slot.status === 'open') handleBookSlot(slot.id);
-                          if (isMyBooking && slot.status === 'requested') handleCancelSlot(slot.id);
-                      }}
-                      className={`px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all active:scale-95 ${btnClass}`}>
-                      {btnText}
-                    </button>
+                                        <div className="flex items-center gap-2">
+                      {isMyBooking && slot.status === 'confirmed' && (
+                        <button onClick={() => handleDownloadConsent(slot.id)} className="p-2 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300">
+                          <Download size={16} />
+                        </button>
+                      )}
+                      <button 
+                        disabled={slot.status !== 'open' && !isMyBooking} 
+                        onClick={() => {
+                            if (slot.status === 'open') handleBookSlot(slot);
+                            if (isMyBooking && slot.status === 'requested') handleCancelSlot(slot.id);
+                        }}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all active:scale-95 ${btnClass}`}>
+                        {btnText}
+                      </button>
+                    </div>
                   </div>
                 );
             })}
           </div>
         )}
+        </div>
       </div>
 
-      <div className="absolute bottom-0 left-0 w-full bg-[#E6DDD0] border-t border-[#c4bcb1] p-2 pb-6 flex justify-around items-center z-20">
-         <button onClick={() => setActiveTab('home')} className={`p-2 rounded-full transition-colors ${activeTab === 'home' ? 'text-[#8A9A5B]' : 'text-slate-400'}`}><Home size={24} /></button>
-         <button onClick={() => setActiveTab('tasks')} className={`p-2 rounded-full transition-colors ${activeTab === 'tasks' ? 'text-[#8A9A5B]' : 'text-slate-400'}`}><CheckSquare size={24} /></button>
-         <div className="w-12 h-12 -mt-8 rounded-full bg-[#8A9A5B] flex items-center justify-center shadow-lg text-white animate-pulse"><Heart size={24} fill="white" /></div>
-         <button onClick={() => setActiveTab('journal')} className={`p-2 rounded-full transition-colors ${activeTab === 'journal' ? 'text-[#8A9A5B]' : 'text-slate-400'}`}><BookOpen size={24} /></button>
-         <button onClick={() => setActiveTab('booking')} className={`p-2 rounded-full transition-colors ${activeTab === 'booking' ? 'text-[#8A9A5B]' : 'text-slate-400'}`}><Calendar size={24} /></button>
+
+
+        {/* Floating Chat Button and Window */}
+        <div className="fixed bottom-8 right-8 z-30">
+          <button onClick={() => setIsChatOpen(!isChatOpen)} className="w-16 h-16 rounded-full bg-[#8A9A5B] flex items-center justify-center shadow-lg text-white animate-pulse">
+            <Heart size={32} fill="white" />
+          </button>
+        </div>
+
+        {isChatOpen && (
+          <div className="fixed bottom-28 right-8 w-96 h-[60vh] bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl flex flex-col z-30 animate-in slide-in-from-bottom-10 duration-500">
+            <div className="p-4 border-b font-bold text-center text-[#708090]">SParsh AI</div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+              {messages.map(msg => (
+                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] p-3 rounded-xl text-sm ${msg.role === 'user' ? 'bg-[#8A9A5B] text-white' : 'bg-gray-200 text-slate-700'}`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {isLoading && <div className="text-center text-xs text-slate-400 animate-pulse">SParsh is listening...</div>}
+              <div ref={messagesEndRef} />
+            </div>
+            <div className="p-4 border-t">
+              <div className="flex gap-2">
+                <input 
+                  type="text" value={inputText} onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="Speak to SParsh..."
+                  className="flex-1 p-2 rounded-lg border border-gray-300 outline-none"
+                />
+                <button onClick={handleSend} className="bg-[#8A9A5B] text-white p-2 rounded-lg"><Send size={18}/></button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* Bottom Navigation (Mobile) */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-[#DCD4C4] border-t border-gray-300 p-2 flex justify-around items-center z-20">
+         <button onClick={() => setActiveTab('home')} className={`p-2 rounded-full transition-colors ${activeTab === 'home' ? 'text-[#8A9A5B]' : 'text-slate-500'}`}><Home size={24} /></button>
+         <button onClick={() => setActiveTab('tasks')} className={`p-2 rounded-full transition-colors ${activeTab === 'tasks' ? 'text-[#8A9A5B]' : 'text-slate-500'}`}><CheckSquare size={24} /></button>
+         <button onClick={() => setActiveTab('booking')} className={`p-2 rounded-full transition-colors ${activeTab === 'booking' ? 'text-[#8A9A5B]' : 'text-slate-500'}`}><Calendar size={24} /></button>
       </div>
     </div>
   );

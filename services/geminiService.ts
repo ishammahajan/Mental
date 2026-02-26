@@ -2,8 +2,16 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { SPARSH_SYSTEM_INSTRUCTION } from "../constants";
 import { VibeType } from "../types";
 
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+
+let ai: GoogleGenAI | undefined;
+
+if (apiKey) {
+  ai = new GoogleGenAI({ apiKey });
+} else {
+  console.error("GEMINI_API_KEY is not set. AI services will be unavailable.");
+}
+
 
 export const sendMessageToSParsh = async (
   history: { role: string; parts: { text: string }[] }[],
@@ -23,9 +31,9 @@ export const sendMessageToSParsh = async (
   }
 
   // Model Selection Logic
-  // Primary: gemini-3-pro-preview (Thinking) or gemini-3-flash-preview (Fast)
+  // Primary: gemini-flash-latest (Thinking) or gemini-3-flash-preview (Fast)
   // Fallback: gemini-3-flash-preview (Stable/Available)
-  const modelId = useFallback ? 'gemini-3-flash-preview' : (useThinking ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview');
+  const modelId = useFallback ? 'gemini-2.5-flash' : (useThinking ? 'gemini-2.5-flash' : 'gemini-2.5-flash');
   const modelUsed = useFallback ? 'fallback' : 'primary';
   
   // Configure thinking budget if using Pro model and NOT in fallback
@@ -139,3 +147,24 @@ export const getResourcesNearby = async (lat: number, lng: number, query: string
         return "Unable to fetch location data right now.";
     }
 }
+
+import { WeatherData } from '../types';
+
+export const getAIWeatherSuggestion = async (weather: WeatherData): Promise<string> => {
+    const now = new Date();
+    const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const day = now.toLocaleDateString([], { weekday: 'long' });
+
+    const prompt = `It is ${day} at ${time} in ${weather.city}. The weather is ${weather.condition} at ${weather.temp}°C, and the AQI is ${weather.aqi} (1=Good, 5=Very Poor). Give a short, creative, mood-lifting suggestion for a student in 1-2 lines. Be empathetic and slightly quirky, like a caring friend. Frame it as a friendly nudge.`;
+
+    try {
+        const result = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt
+        });
+        return result.text || "Take a deep breath and find a moment of calm.";
+    } catch (error) {
+        console.error("Error getting AI suggestion:", error);
+        return "Take a deep breath and find a moment of calm."; // Fallback
+    }
+};

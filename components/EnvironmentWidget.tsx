@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CloudRain, Wind, Sun, Droplets, Cloud, Snowflake, CloudFog, Loader, MapPin } from 'lucide-react';
 import { getWeatherData } from '../services/weatherService';
+import { getAIWeatherSuggestion } from '../services/geminiService';
 import { WeatherData } from '../types';
 
 interface Props {
@@ -30,9 +31,10 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
   const [data, setData] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<string>("How's the weather in your world?");
 
   useEffect(() => {
-    const fetchEnvData = () => {
+    const fetchEnvData = async () => {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
@@ -40,6 +42,8 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
             setLoading(true);
             const weatherData = await getWeatherData(position.coords.latitude, position.coords.longitude);
             setData(weatherData);
+            const aiSuggestion = await getAIWeatherSuggestion(weatherData);
+            setSuggestion(aiSuggestion);
           } catch (err) {
             setError('Could not fetch environmental data.');
           } finally {
@@ -52,44 +56,14 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
         }
       );
     };
+
     fetchEnvData();
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchEnvData, 3600000);
+    return () => clearInterval(interval);
   }, []);
   
-  const getSparshEnvironmentalNudge = () => {
-      if (!data) return "How's the weather in your world?";
-      
-      const { aqi, temp, condition } = data;
 
-      if (aqi > 3) {
-          const badAirJokes = [
-              "Mumbai's air is basically soup today. Seriously, mask up or your lungs will write a formal complaint.",
-              "AQI is toxic. Treat your lungs like they're a term project worth 40% of your grade. Protect them.",
-              "Breathing this air is like smoking a pack of... well, just don't. Wear a mask."
-          ];
-          return badAirJokes[Math.floor(Math.random() * badAirJokes.length)];
-      }
-      if (temp > 33) {
-          const hotJokes = [
-              "It's hotter than a finance exam out there. Hydrate or you'll desiccate. That's a big word, it means 'dry up like a leaf'.",
-              "Warning: You might actually melt. Stay inside or find someone with a pool. Now.",
-              "I'm an AI, I don't feel heat, but my servers are sweating just looking at your weather. Drink water."
-          ];
-          return hotJokes[Math.floor(Math.random() * hotJokes.length)];
-      }
-      if (condition.toLowerCase().includes('rain')) {
-          const rainJokes = [
-              "It's raining. Perfect excuse to romanticize your life with a book and coffee... or just binge-watch something. No judgment.",
-              "Don't even think about going out without an umbrella unless you want to look like you just lost a water-balloon fight."
-          ];
-          return rainJokes[Math.floor(Math.random() * rainJokes.length)];
-      }
-
-      const goodWeatherJokes = [
-          "The weather is perfect. That's your cue. Go touch some grass. The real kind, not the virtual kind.",
-          "Okay, the universe is giving you a gift with this weather. Take a 10-minute walk. Your brain will thank you. Go on."
-      ];
-      return goodWeatherJokes[Math.floor(Math.random() * goodWeatherJokes.length)];
-  };
 
   const renderLoading = () => (
       <div className="flex items-center justify-center gap-2 p-4 text-sm text-slate-400">
@@ -116,7 +90,7 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
              ) : null
            }
         </div>
-        <div>{getSparshEnvironmentalNudge()}</div>
+        <div>{suggestion}</div>
       </div>
     );
   }
@@ -139,7 +113,10 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
                 </div>
             </div>
             <div className="text-right max-w-[50%]">
-                <p className="text-xs text-[#708090] italic">"{getSparshEnvironmentalNudge()}"</p>
+                <p className="text-lg font-bold text-[#8A9A5B]">{suggestion}</p>
+                <p className={`text-sm mt-1 ${AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.color || 'text-[#CC5500]'}`}>
+                  AQI: {data.aqi} ({AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.label || 'Unknown'})
+                </p>
             </div>
         </>
       )}

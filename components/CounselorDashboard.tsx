@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { MOCK_STUDENTS } from '../constants';
+
 import EnvironmentWidget from './EnvironmentWidget';
-import { AlertTriangle, Clock, Activity, Bell, FilePlus, ClipboardList, PlusCircle, Trash2, CheckCircle, XCircle, LogOut, MessageSquare, Send, Mail, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Clock, Activity, Bell, FilePlus, ClipboardList, PlusCircle, Trash2, CheckCircle, XCircle, LogOut, MessageSquare, Send, Mail, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as db from '../services/storage';
-import { AppointmentSlot, P2PMessage } from '../types';
+import { AppointmentSlot, P2PMessage, ConsentData, User } from '../types';
+import ConsentForm from './ConsentForm';
+import { useNotification } from '../contexts/NotificationContext';
 
 // Mock Graph Data
 const stressData = [
@@ -16,11 +18,13 @@ const stressData = [
 ];
 
 const CounselorDashboard: React.FC = () => {
+  const { addNotification } = useNotification();
+  const [students, setStudents] = useState<User[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
   
   // Modals
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
+
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
   const [showInboxModal, setShowInboxModal] = useState(false);
@@ -39,6 +43,12 @@ const CounselorDashboard: React.FC = () => {
   const [conversations, setConversations] = useState<{ studentId: string, lastMessage: P2PMessage | null, unreadCount: number }[]>([]);
   const [totalUnread, setTotalUnread] = useState(0);
 
+  // Consent Form State
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [selectedSlotForConsent, setSelectedSlotForConsent] = useState<AppointmentSlot | null>(null);
+    const [consentData, setConsentData] = useState<ConsentData | null>(null);
+  const [studentForConsent, setStudentForConsent] = useState<User | null>(null);
+
   // Derived
   const pendingRequests = slots.filter(s => s.status === 'requested').length;
 
@@ -48,44 +58,90 @@ const CounselorDashboard: React.FC = () => {
         setSlots(await db.getSlots());
         
         // Fetch Inbox Data
-        const convos = await db.getCounselorConversations('counselor_dimple');
+        const convos = await db.getCounselorConversations('counselor_dimple_wagle');
         setConversations(convos);
         const unread = convos.reduce((acc, curr) => acc + curr.unreadCount, 0);
         setTotalUnread(unread);
 
         // Fetch active chat details if open
         if (showChatModal && selectedStudent) {
-            setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
+            setChatHistory(await db.getP2PThread('counselor_dimple_wagle', selectedStudent));
         }
     };
 
-    const interval = setInterval(fetchUpdates, 3000);
-    const init = async () => fetchUpdates();
+        const interval = setInterval(fetchUpdates, 3000);
+    const init = async () => {
+      const allUsers = await db.getAllUsers();
+      setStudents(allUsers.filter(u => u.role === 'student'));
+      fetchUpdates();
+    };
     init();
     return () => clearInterval(interval);
   }, [showChatModal, selectedStudent]);
 
   // Actions
-  const handleSlotAction = async (slotId: string, action: 'confirm' | 'reject' | 'delete') => {
-      if (action === 'delete') await db.deleteSlot(slotId);
-      else if (action === 'confirm') await db.updateSlotStatus(slotId, 'confirmed');
-      else if (action === 'reject') await db.updateSlotStatus(slotId, 'open');
+  const handleSlotAction = async (slot: AppointmentSlot, action: 'confirm' | 'reject' | 'delete') => {
+      if (action === 'delete') {
+        await db.deleteSlot(slot.id);
+        addNotification('Slot deleted successfully', 'error');
+      } else if (action === 'reject') {
+        await db.updateSlotStatus(slot.id, 'open');
+        addNotification('Slot request rejected', 'info');
+      } else if (action === 'confirm') {
+        const consent = await db.getConsentForSlot(slot.id);
+                if (consent) {
+          const student = await db.getUser(consent.studentId);
+          if (student) {
+            setStudentForConsent(student);
+          }
+          setConsentData(consent);
+          setSelectedSlotForConsent(slot);
+          setShowConsentModal(true);
+        } else {
+          // If for some reason consent is not found, just confirm.
+          await db.updateSlotStatus(slot.id, 'confirmed');
+        }
+      }
       setSlots(await db.getSlots());
   };
 
-  const handleIssueLeave = async () => {
-      // Confirm Leave Logic
-      const emailMap = "mba.rohan@spjimr.org"; 
-      await db.issueLeave(emailMap, {
-        isActive: true,
-        issuedDate: new Date().toLocaleDateString(),
-        expiryDate: new Date(Date.now() + 86400000 * 2).toLocaleDateString(),
-        issuedBy: "Dr. Dimple Wagle",
-        reason: "Counselor Prescribed Rest"
-      });
-      setShowLeaveModal(false);
-      alert("Leave Letter Issued & Sent to Admin.");
+    const handleDownloadConsent = async (slotId: string) => {
+    const consent = await db.getConsentForSlot(slotId);
+    if (consent) {
+      const blob = new Blob([JSON.stringify(consent, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `consent-form-${consent.studentName.replace(/ /g, '_')}-${consent.slotId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
+
+  const handleConsentSignAndConfirm = async (signature: string | File) => {
+    if (!selectedSlotForConsent || !consentData) return;
+
+    const updatedConsent: ConsentData = {
+      ...consentData,
+      counselorId: 'counselor_dimple_wagle',
+      counselorName: 'Ms Dimple Wagle',
+      counselorSignature: signature as string,
+      counselorSignDate: new Date().toISOString(),
+    };
+
+    await db.saveConsent(updatedConsent);
+    await db.updateSlotStatus(selectedSlotForConsent.id, 'confirmed');
+    addNotification('Slot confirmed and consent signed', 'success');
+
+    setShowConsentModal(false);
+    setSelectedSlotForConsent(null);
+    setConsentData(null);
+    setSlots(await db.getSlots());
+  };
+
+
 
   const handleAssignTask = async () => {
      if(!taskInput.trim()) return;
@@ -114,6 +170,7 @@ const CounselorDashboard: React.FC = () => {
           counselorName: "Dr. Dimple Wagle",
           status: 'open'
       });
+      addNotification('New slot published successfully', 'success');
       setSlots(await db.getSlots());
       setShowScheduleModal(false);
       setSelectedTime(null);
@@ -123,22 +180,22 @@ const CounselorDashboard: React.FC = () => {
       if(!chatInput.trim() || !selectedStudent) return;
       await db.sendP2PMessage({
           id: Date.now().toString(),
-          senderId: 'counselor_dimple',
+          senderId: 'counselor_dimple_wagle',
           receiverId: selectedStudent,
           text: chatInput,
           timestamp: new Date().toISOString(),
           isRead: false
       });
       setChatInput('');
-      setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
+      setChatHistory(await db.getP2PThread('counselor_dimple_wagle', selectedStudent));
   };
 
   const openChatFromInbox = async (studentId: string) => {
       setSelectedStudent(studentId);
-      await db.markThreadAsRead('counselor_dimple', studentId);
+      await db.markThreadAsRead('counselor_dimple_wagle', studentId);
       setShowInboxModal(false);
       setShowChatModal(true);
-      setChatHistory(await db.getP2PThread('counselor_dimple', studentId));
+      setChatHistory(await db.getP2PThread('counselor_dimple_wagle', studentId));
   };
 
   // Calendar Helpers
@@ -165,7 +222,7 @@ const CounselorDashboard: React.FC = () => {
   }
 
   return (
-    <div className="h-full bg-gray-50 text-slate-800 font-sans flex flex-col relative">
+    <div className="min-h-screen bg-gray-50 text-slate-800 font-sans flex flex-col relative">
       
       {/* Top Header */}
       <header className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-sm z-10">
@@ -211,20 +268,20 @@ const CounselorDashboard: React.FC = () => {
             <h2 className="font-bold text-slate-700">Priority Alerts</h2>
             <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs font-bold">Live</span>
           </div>
-          <div className="overflow-y-auto flex-1 p-2 space-y-2">
-            {MOCK_STUDENTS.map((student, idx) => (
-              <div key={idx} onClick={() => setSelectedStudent(student.hashId)} 
-                className={`p-4 rounded-lg border cursor-pointer transition-colors group ${selectedStudent === student.hashId ? 'border-[#8A9A5B] ring-1 ring-[#8A9A5B]' : ''} ${student.stressScore > 80 ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100'}`}>
+                    <div className="overflow-y-auto flex-1 p-2 space-y-2">
+            {students.map((student) => (
+              <div key={student.id} onClick={() => setSelectedStudent(student.casefileId || student.id)} 
+                className={`p-4 rounded-lg border cursor-pointer transition-colors group ${selectedStudent === (student.casefileId || student.id) ? 'border-[#8A9A5B] ring-1 ring-[#8A9A5B]' : 'bg-white border-gray-100'}`}>
                 <div className="flex justify-between items-start mb-2">
-                  <span className="font-mono text-xs text-slate-500">{student.hashId}</span>
-                  {student.status === 'High Risk' && <AlertTriangle size={14} className="text-red-500" />}
+                  <span className="font-mono text-xs text-slate-500">{student.casefileId}</span>
+                  <AlertTriangle size={14} className="text-red-500" />
                 </div>
                 <div className="flex justify-between items-end">
                   <div>
-                     <div className="text-sm font-medium text-slate-700">Stress Score</div>
-                     <div className={`text-xl font-bold ${student.stressScore > 80 ? 'text-red-600' : 'text-slate-700'}`}>{student.stressScore}</div>
+                     <div className="text-sm font-medium text-slate-700">{student.name}</div>
+                     <div className={`text-xl font-bold text-slate-700`}>{student.program}</div>
                   </div>
-                  <div className="text-right"><div className="text-xs text-slate-400">Last Active</div><div className="text-xs font-medium text-slate-600">{student.lastCheckIn}</div></div>
+                  <div className="text-right"><div className="text-xs text-slate-400">Last Active</div><div className="text-xs font-medium text-slate-600">-</div></div>
                 </div>
               </div>
             ))}
@@ -240,9 +297,7 @@ const CounselorDashboard: React.FC = () => {
                 <p className="text-sm text-slate-500">{selectedStudent ? 'MBA Year 1 • High Workload detected' : 'Click a student on the left to view details'}</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setShowLeaveModal(true)} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 disabled:opacity-50 transition-colors">
-                    <FilePlus size={14}/> Issue Leave
-                </button>
+
                 <button onClick={() => setShowTaskModal(true)} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 transition-colors">
                     <ClipboardList size={14}/> Assign Task
                 </button>
@@ -290,22 +345,27 @@ const CounselorDashboard: React.FC = () => {
                                 <div className="text-xs text-slate-500">{slot.date}</div>
                             </div>
                         </div>
-                        <button onClick={() => handleSlotAction(slot.id, 'delete')}><Trash2 size={14} className="text-slate-300 hover:text-red-500"/></button>
+                        <button onClick={() => handleSlotAction(slot, 'delete')}><Trash2 size={14} className="text-slate-300 hover:text-red-500"/></button>
                      </div>
                      
                      {slot.status === 'requested' && (
                          <div className="mt-2 p-2 bg-white rounded border border-yellow-100">
                              <div className="text-xs text-slate-500 mb-2">Req: {slot.bookedByStudentName}</div>
                              <div className="flex gap-2">
-                                 <button onClick={() => handleSlotAction(slot.id, 'confirm')} className="flex-1 bg-green-500 text-white text-xs py-1 rounded hover:bg-green-600">Accept</button>
-                                 <button onClick={() => handleSlotAction(slot.id, 'reject')} className="flex-1 bg-red-100 text-red-500 text-xs py-1 rounded hover:bg-red-200">Reject</button>
+                                 <button onClick={() => handleSlotAction(slot, 'confirm')} className="flex-1 bg-green-500 text-white text-xs py-1 rounded hover:bg-green-600">Accept</button>
+                                 <button onClick={() => handleSlotAction(slot, 'reject')} className="flex-1 bg-red-100 text-red-500 text-xs py-1 rounded hover:bg-red-200">Reject</button>
                              </div>
                          </div>
                      )}
 
                      {slot.status === 'confirmed' && (
-                         <div className="flex items-center gap-1 text-xs text-blue-600 font-bold">
-                             <CheckCircle size={12}/> Confirmed: {slot.bookedByStudentName?.split(' ')[0]}
+                                                  <div className="flex items-center justify-between w-full">
+                           <div className="flex items-center gap-1 text-xs text-blue-600 font-bold">
+                               <CheckCircle size={12}/> Confirmed: {slot.bookedByStudentName?.split(' ')[0]}
+                           </div>
+                           <button onClick={() => handleDownloadConsent(slot.id)} className="p-1.5 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300">
+                             <Download size={12} />
+                           </button>
                          </div>
                      )}
 
@@ -316,36 +376,17 @@ const CounselorDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Leave Modal */}
-      {showLeaveModal && (
-          <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center p-8 backdrop-blur-sm animate-in fade-in duration-200">
-              <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full flex flex-col h-[80vh]">
-                  <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                      <h3 className="text-xl font-bold text-slate-800">Generate Wellness Leave Letter</h3>
-                      <button onClick={() => setShowLeaveModal(false)}><XCircle className="text-slate-400 hover:text-red-500"/></button>
-                  </div>
-                  <div className="flex-1 p-8 bg-gray-50 overflow-y-auto font-serif text-slate-700 leading-relaxed">
-                      <p className="mb-8 text-right">Date: {new Date().toLocaleDateString()}</p>
-                      <p className="mb-4">To,<br/>The PGDM Office / Admin,<br/>SPJIMR Campus.</p>
-                      <p className="mb-4 font-bold underline">Subject: Medical Leave Recommendation for Student ID: {selectedStudent}</p>
-                      <p className="mb-4">Respected Sir/Ma'am,</p>
-                      <p className="mb-4">
-                          This is to certify that the student with ID <strong>{selectedStudent}</strong> has been under my observation and counseling. 
-                          Based on their current mental health metrics and our sessions, I strongly recommend a period of rest and recovery.
-                      </p>
-                      <p className="mb-4">
-                          <strong>Recommended Leave Period:</strong> 2 Days<br/>
-                          <strong>Reason:</strong> Acute Stress & Burnout Recovery
-                      </p>
-                      <p className="mb-8">Kindly grant the necessary leave to support their well-being.</p>
-                      <p>Sincerely,<br/><br/><strong>Dr. Dimple Wagle</strong><br/>Campus Counselor, SPJIMR</p>
-                  </div>
-                  <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-4">
-                      <button onClick={() => setShowLeaveModal(false)} className="px-4 py-2 text-slate-500 hover:bg-gray-100 rounded-lg">Cancel</button>
-                      <button onClick={handleIssueLeave} className="px-6 py-2 bg-[#8A9A5B] text-white rounded-lg shadow-md hover:bg-[#76854d]">Sign & Issue</button>
-                  </div>
-              </div>
-          </div>
+
+
+      {showConsentModal && selectedSlotForConsent && consentData && (
+        <ConsentForm 
+          role="counselor"
+          studentName={consentData.studentName}
+          program="PGDM"
+          onClose={() => setShowConsentModal(false)}
+                    onSubmit={handleConsentSignAndConfirm}
+          user={studentForConsent ?? undefined}
+        />
       )}
 
       {/* Task Modal */}
@@ -492,5 +533,7 @@ const CounselorDashboard: React.FC = () => {
     </div>
   );
 };
+
+
 
 export default CounselorDashboard;

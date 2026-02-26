@@ -55,9 +55,11 @@ export const getWeatherData = async (lat: number, lon: number): Promise<WeatherD
         const locationData = await locationRes.json();
         
         const locationName = `${locationData.address.suburb || locationData.address.city_district || locationData.address.city || 'Unknown'}, ${locationData.address.state}`;
-        
+        const cityName = locationData.address.city || locationData.address.state_district || locationData.address.suburb || 'Unknown';
+
         return {
             location: locationName.toUpperCase(),
+            city: cityName,
             temp: Math.round(weatherData.current_weather.temperature),
             condition: WMO_CODES[weatherData.current_weather.weathercode as keyof typeof WMO_CODES] || 'Clear',
             aqi: getAqiLevel(aqiData.current.us_aqi),

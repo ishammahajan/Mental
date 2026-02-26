@@ -2,10 +2,14 @@ export type Role = 'student' | 'counselor' | 'admin';
 
 export interface User {
   id: string;
+  casefileId?: string;
   name: string;
   role: Role;
   email: string;
   program?: string; // e.g., "MBA Year 1"
+  mobile?: string;
+  likes?: string[];
+  dislikes?: string[];
 }
 
 export interface Message {
@@ -14,7 +18,7 @@ export interface Message {
   text: string;
   timestamp: Date;
   metadata?: {
-    type: 'booking_suggestion' | 'task_assignment' | 'crisis_trigger' | 'booking_request_sent' | 'booking_slot_taken';
+    type: 'booking_suggestion' | 'task_assignment' | 'crisis_trigger' | 'booking_request_sent' | 'booking_slot_taken' | 'booking_confirmation';
     slotId?: string;
     slotTime?: string;
     taskName?: string;
@@ -62,12 +66,28 @@ export interface WellnessTask {
   assignedBy: string; // Counselor Name or "SParsh Guardian"
 }
 
+
+
 export interface WellnessLeave {
-  isActive: boolean;
-  issuedDate: string;
-  expiryDate: string;
-  issuedBy: string;
+  id: string;
+  studentId: string;
+  studentName: string;
+  startDate: string;
+  endDate: string;
   reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface ConsentData {
+  slotId: string;
+  studentId: string;
+  studentName: string;
+  studentSignature: string; // URL or base64
+  studentSignDate: string;
+  counselorId: string;
+  counselorName: string;
+  counselorSignature: string; // Typed name
+  counselorSignDate: string;
 }
 
 export interface JournalEntry {
@@ -81,7 +101,7 @@ export type VibeType = 'calm' | 'anxious' | 'focus' | 'tired' | 'energetic';
 export interface AgentAnalysis {
   sentimentScore: number; // 0-100
   riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
-  recommendedAction: 'NONE' | 'SUGGEST_BOOKING' | 'ASSIGN_EXERCISE' | 'TRIGGER_SOS';
+  recommendedAction: 'NONE' | 'SUGGEST_BOOKING' | 'ASSIGN_EXERCISE' | 'TRIGGER_SOS' | 'BOOK_SLOT';
   reasoning: string;
   specificExercise?: string; // e.g., "Box Breathing"
 }
@@ -89,6 +109,7 @@ export interface AgentAnalysis {
 // FIX: Added missing WeatherData interface used by EnvironmentWidget.tsx
 export interface WeatherData {
   location: string;
+  city: string;
   temp: number;
   condition: string;
   aqi: number;
