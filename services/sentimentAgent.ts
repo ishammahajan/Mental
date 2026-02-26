@@ -1,160 +1,143 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { Message, AgentAnalysis, WellnessTask } from "../types";
 import * as db from './storage';
 import { handleBookingRequest } from './bookingAgent';
+import { analyzeMentalHealthText } from './mentalHealthSentimentService';
 
-// ---------------------------------------------------------
-// API KEY MANAGEMENT
-// The application requires a valid API_KEY.
-// If your token expired, generate a new one at aistudio.google.com
-// ---------------------------------------------------------
-const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || ''; 
+const HF_TOKEN = (import.meta as any).env?.VITE_HF_TOKEN || '';
+const HF_AGENT_MODEL = 'mistralai/Mistral-7B-Instruct-v0.3';
 
-let ai: GoogleGenAI | undefined;
-
-if (apiKey) {
-  ai = new GoogleGenAI({ apiKey });
-} else {
-  console.error("GEMINI_API_KEY is not set in sentimentAgent. AI services will be unavailable.");
-}
-
-
-/**
- * THE AUTONOMOUS GUARDIAN (SLM)
- * Model: Gemini Flash Lite (Low Latency, Low Cost)
- * Role: Background Clinical Triage & Autonomous Intervention
- */
 export const analyzeSentimentAndSchedule = async (
   userId: string,
   userEmail: string,
-  recentMessages: Message[]
+  recentMessages: Message[],
+  modelIndex: number = 0
 ): Promise<Message | null> => {
-  
-  // 1. Context Window: Last 6 messages to understand trajectory
-  const conversationLog = recentMessages
-    .slice(-6)
-    .map(m => `${m.role.toUpperCase()}: ${m.text}`)
-    .join("\n");
 
-  if (!conversationLog) return null;
+  const lastUserMessages = recentMessages.filter(m => m.role === 'user').slice(-3);
+  const fullContext = lastUserMessages.map(m => m.text).join(' ');
+
+  if (!fullContext) return null;
+
+  // ─── Stage 1: HuggingFace specialized mental health sentiment ───────────
+  // Uses j-hartmann/emotion-english-distilroberta-base (free, no key needed)
+  const hfResult = await analyzeMentalHealthText(fullContext);
+  console.log(`[SParsh Guardian] HF Sentiment (${hfResult.source}):`, hfResult.dominantEmotion, hfResult.riskLevel);
+
+  // Direct crisis intercept from specialist model — no need to call LLM
+  if (hfResult.riskLevel === 'CRITICAL') {
+    return {
+      id: Date.now().toString(), role: 'agent',
+      text: "CRITICAL ALERT: I am activating the campus emergency protocol. Help is on the way.",
+      timestamp: new Date(), metadata: { type: 'crisis_trigger' }
+    };
+  }
+
+  const conversationLog = recentMessages.slice(-6).map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n');
+
+  // ─── Stage 2: HuggingFace Mistral for nuanced text reasoning & action selection ──────
+  if (!HF_TOKEN) return null;
 
   try {
-    // 2. The Clinical Reasoning Prompt
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-lite-latest",
-      contents: `
-        Act as an Autonomous Clinical Triage System called "SParsh Guardian".
-        Analyze the conversation below. Your job is to act SILENTLY but DECISIVELY.
-        
-        RULES:
-        1. If user mentions insomnia, panic, or restlessness -> ASSIGN_EXERCISE (e.g., "4-7-8 Breathing").
-        2. If user mentions "need to talk", "overwhelmed", or sustained distress -> SUGGEST_BOOKING.
-        3. If user mentions self-harm, ending it, or extreme hopelessness -> TRIGGER_SOS.
-        4. If user asks to book a slot, schedule an appointment, or similar -> BOOK_SLOT.
-        5. Otherwise -> NONE.
-        
-        CONVERSATION LOG:
-        ${conversationLog}
-      `,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            sentimentScore: { type: Type.NUMBER, description: "0 (Worst) to 100 (Best)" },
-            riskLevel: { type: Type.STRING, enum: ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'] },
-            recommendedAction: { type: Type.STRING, enum: ['NONE', 'SUGGEST_BOOKING', 'ASSIGN_EXERCISE', 'TRIGGER_SOS', 'BOOK_SLOT'] },
-            specificExercise: { type: Type.STRING, description: "Name of exercise if applicable" },
-            reasoning: { type: Type.STRING }
-          }
-        }
+    const systemPrompt = `
+      Act as "SParsh Guardian", an Autonomous Wellness Triage System.
+      
+      SPECIALIST MENTAL HEALTH ANALYSIS (from emotion model):
+      - Dominant Emotion: ${hfResult.dominantEmotion}
+      - Wellbeing Score: ${hfResult.sentimentScore}/100
+      - Risk Level: ${hfResult.riskLevel}
+
+      RULES — choose one action based on the analysis above AND conversation:
+      1. High fear/sadness or MODERATE+ risk, mentions insomnia/panic/restlessness → ASSIGN_EXERCISE
+      2. Sustained distress, mentions "need to talk"/"overwhelmed" → SUGGEST_BOOKING
+      3. User explicitly asks to book/schedule → BOOK_SLOT
+      4. Otherwise → NONE
+
+      Return strictly a JSON object with this shape:
+      {
+        "recommendedAction": "NONE" | "SUGGEST_BOOKING" | "ASSIGN_EXERCISE" | "BOOK_SLOT",
+        "specificExercise": "Breathing Exercise" | "Grounding" | "Journaling" | null,
+        "reasoning": "string explanation"
       }
+    `;
+
+    const res = await fetch(`https://api-inference.huggingface.co/models/${HF_AGENT_MODEL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: HF_AGENT_MODEL,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: conversationLog }],
+        max_tokens: 256,
+        temperature: 0.2
+      }),
+      signal: AbortSignal.timeout(12000),
     });
 
-    const analysis: AgentAnalysis = JSON.parse(response.text || '{}');
-    console.log("Guardian Analysis:", analysis);
+    if (!res.ok) throw new Error("HF Agent failed");
 
-    // -------------------------------------------------------
-    // AUTONOMOUS ACTIONS (DB Writes & Interventions)
-    // -------------------------------------------------------
+    const data = await res.json();
+    const rawContent = data?.choices?.[0]?.message?.content || '{}';
+    // attempt to extract json if it wrapped it in markdown
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+    const jsonText = jsonMatch ? jsonMatch[0] : rawContent;
 
-    // ACTION 1: TRIGGER SOS (Guardrails Broken)
-    if (analysis.recommendedAction === 'TRIGGER_SOS' || analysis.riskLevel === 'CRITICAL') {
-        return {
-            id: Date.now().toString(),
-            role: 'agent',
-            text: "CRITICAL ALERT: I am activating the campus emergency protocol. Help is on the way.",
-            timestamp: new Date(),
-            metadata: { type: 'crisis_trigger' }
-        };
-    }
+    const analysis: Partial<AgentAnalysis> & { recommendedAction: string; specificExercise?: string; reasoning?: string } =
+      JSON.parse(jsonText);
+    console.log("Guardian Action:", analysis.recommendedAction);
 
-    // ACTION 2: ASSIGN EXERCISE (Proactive Care)
     if (analysis.recommendedAction === 'ASSIGN_EXERCISE' && analysis.specificExercise) {
-        // Autonomously write to DB
-        const newTask: WellnessTask = {
-            id: Date.now().toString(),
-            title: analysis.specificExercise,
-            description: `Auto-assigned by SParsh Guardian based on your chat about: ${analysis.reasoning}`,
-            isCompleted: false,
-            assignedBy: "SParsh AI"
-        };
-        await db.assignTask(userEmail, newTask);
-
-        // Notify User
-        return {
-            id: Date.now().toString(),
-            role: 'agent',
-            text: `I noticed you're feeling a bit off-center. I've added a "${analysis.specificExercise}" routine to your Tasks tab. Give it a try?`,
-            timestamp: new Date(),
-            metadata: { 
-                type: 'task_assignment',
-                taskName: analysis.specificExercise
-            }
-        };
+      const newTask: WellnessTask = {
+        id: Date.now().toString(),
+        title: analysis.specificExercise,
+        description: `Auto-assigned by SParsh Guardian (${hfResult.dominantEmotion} detected): ${analysis.reasoning || ''}`,
+        isCompleted: false,
+        assignedBy: "SParsh AI"
+      };
+      await db.assignTask(userEmail, newTask);
+      return {
+        id: Date.now().toString(), role: 'agent',
+        text: `I noticed you might be feeling ${hfResult.dominantEmotion} right now 💙. I've added a "${analysis.specificExercise}" routine to your Tasks tab — it can really help.`,
+        timestamp: new Date(), metadata: { type: 'task_assignment', taskName: analysis.specificExercise }
+      };
     }
 
-    // ACTION 3: SUGGEST BOOKING (Connection)
     if (analysis.recommendedAction === 'BOOK_SLOT') {
-        const lastUserMessage = recentMessages.filter(m => m.role === 'user').pop();
-        if (lastUserMessage) {
-            const bookingResponse = await handleBookingRequest(userId, userEmail, lastUserMessage.text);
-            return {
-                id: Date.now().toString(),
-                role: 'agent',
-                text: bookingResponse,
-                timestamp: new Date(),
-                metadata: { type: 'booking_confirmation' }
-            };
-        }
+      const lastUserMessage = recentMessages.filter(m => m.role === 'user').pop();
+      if (lastUserMessage) {
+        const bookingResponse = await handleBookingRequest(userId, userEmail, lastUserMessage.text);
+        return { id: Date.now().toString(), role: 'agent', text: bookingResponse, timestamp: new Date(), metadata: { type: 'booking_confirmation' } };
+      }
     }
 
-    // ACTION 3: SUGGEST BOOKING (Connection)
     if (analysis.recommendedAction === 'SUGGEST_BOOKING') {
-        const allSlots = await db.getSlots();
-        const openSlots = allSlots.filter(s => s.status === 'open');
-        
-        if (openSlots.length > 0) {
-            const bestSlot = openSlots[0];
-            return {
-                id: Date.now().toString(),
-                role: 'agent',
-                text: "It sounds like talking to a human might help clarify things. I found an open slot with Dr. Dimple.",
-                timestamp: new Date(),
-                metadata: {
-                    type: 'booking_suggestion',
-                    slotId: bestSlot.id,
-                    slotTime: `${bestSlot.date} at ${bestSlot.time}`
-                }
-            };
-        }
+      const openSlots = (await db.getSlots()).filter(s => s.status === 'open');
+      if (openSlots.length > 0) {
+        const best = openSlots[0];
+        return {
+          id: Date.now().toString(), role: 'agent',
+          text: `It sounds like you're carrying a lot right now. Sometimes talking to someone helps. I've found an open slot with the counselor — you can book directly below 💙`,
+          timestamp: new Date(),
+          metadata: { type: 'booking_suggestion', slotId: best.id, slotTime: `${best.date} at ${best.time}` }
+        };
+      }
     }
 
-    return null; // No intervention needed
+    return null;
 
-  } catch (e) {
+  } catch (e: any) {
     console.error("SLM Agent Error:", e);
-    // Silent fail is acceptable for the background agent to prevent disrupting the main chat flow
+
+    // Even if Gemini fails, we can still act on critical HF result
+    if (hfResult.riskLevel === 'HIGH') {
+      const openSlots = (await db.getSlots()).filter(s => s.status === 'open');
+      if (openSlots.length > 0) {
+        return {
+          id: Date.now().toString(), role: 'agent',
+          text: "I can sense you might be going through a tough moment. Would you like to book a session with the counselor? You can do so directly below 💙",
+          timestamp: new Date(),
+          metadata: { type: 'booking_suggestion', slotId: openSlots[0].id, slotTime: `${openSlots[0].date} at ${openSlots[0].time}` }
+        };
+      }
+    }
     return null;
   }
 };

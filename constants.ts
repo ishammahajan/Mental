@@ -1,5 +1,12 @@
 import { VibeType, AnonymizedStudent, AppointmentSlot } from "./types";
 
+export const COUNSELORS = [
+  { id: 'counselor_dimple', name: 'Ms. Dimple Wagle', email: 'dimple.wagle@spjimr.org', specialization: 'Anxiety & Stress Management', avatar: 'DW' },
+  { id: 'counselor_jyoti', name: 'Ms. Jyoti Sangle', email: 'jyoti.sangle@spjimr.org', specialization: 'Career Counselling & Grief', avatar: 'JS' },
+];
+
+
+
 export const COLORS = {
   sage: '#8A9A5B',
   sand: '#E6DDD0',

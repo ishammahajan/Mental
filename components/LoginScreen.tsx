@@ -14,22 +14,22 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
 
   const handleSplashClick = () => setStep('form');
 
-    const handleQuickLogin = async (email: string, role: Role) => {
+  const handleQuickLogin = async (email: string, role: Role) => {
     setIsAuthenticating(true);
     setError('');
     try {
-        const user = await loginOrRegisterUser(email, role);
-        setTimeout(() => {
-            onLogin(user);
-            setIsAuthenticating(false);
-        }, 800);
-    } catch (err) {
-        setError("Authentication failed. Please try again.");
+      const user = await loginOrRegisterUser(email, role);
+      setTimeout(() => {
+        onLogin(user);
         setIsAuthenticating(false);
+      }, 800);
+    } catch (err) {
+      setError("Authentication failed. Please try again.");
+      setIsAuthenticating(false);
     }
   };
 
-    const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -40,7 +40,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
 
     setIsAuthenticating(true);
 
-    let role: Role = 'counselor'; 
+    let role: Role = 'counselor';
 
     if (email === 'admin@spjimr.org') {
       role = 'admin';
@@ -54,37 +54,42 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
     }
 
     try {
-        // Call Storage Service to Create/Get User
-        const user = await loginOrRegisterUser(email, role);
-        
-        // Simulate Network Delay
-        setTimeout(() => {
-            onLogin(user);
-            setIsAuthenticating(false);
-        }, 800);
+      // Call Storage Service to Create/Get User
+      const user = await loginOrRegisterUser(email, role);
+
+      // Simulate Network Delay
+      setTimeout(() => {
+        onLogin(user);
+        setIsAuthenticating(false);
+      }, 800);
 
     } catch (err) {
-        setError("Authentication failed. Please try again.");
-        setIsAuthenticating(false);
+      setError("Authentication failed. Please try again.");
+      setIsAuthenticating(false);
     }
   };
 
   if (step === 'splash') {
     return (
-      <div 
+      <div
         onClick={handleSplashClick}
         className="h-screen w-full bg-[#E6DDD0] flex flex-col items-center justify-center cursor-pointer animate-in fade-in duration-700"
       >
         <div className="relative w-48 h-48 mb-8">
-           <div className="absolute inset-0 bg-[#8A9A5B] rounded-full opacity-20 animate-ping"></div>
-           <div className="absolute inset-4 bg-[#8A9A5B] rounded-full opacity-40 animate-pulse"></div>
-           <div className="absolute inset-8 bg-[#8A9A5B] rounded-full flex items-center justify-center shadow-xl">
-              <span className="text-white text-5xl font-bold">S</span>
-           </div>
+          <div className="absolute inset-0 bg-[#8A9A5B] rounded-full opacity-20 animate-ping"></div>
+          <div className="absolute inset-4 bg-[#8A9A5B] rounded-full opacity-40 animate-pulse"></div>
+          <div className="absolute inset-8 bg-[#8A9A5B] rounded-full flex items-center justify-center shadow-xl">
+            <span className="text-white text-5xl font-bold">S</span>
+          </div>
         </div>
         <h1 className="text-4xl font-bold text-[#708090] tracking-wider mb-2">SPeakUp</h1>
         <p className="text-[#CC5500] text-sm uppercase tracking-widest">SPJIMR Ecosystem</p>
         <p className="mt-12 text-[#708090]/50 text-sm animate-bounce">Tap to Begin</p>
+        <div className="absolute bottom-6 left-0 right-0 text-center px-8">
+          <p className="text-[10px] text-[#708090]/40 leading-relaxed">
+            ⚕️ <strong>Medical Disclaimer:</strong> SPeakUp is a wellness support tool. It is <em>not</em> a clinical diagnosis tool and does <em>not</em> replace professional medical advice or treatment. In a crisis, please call <strong>iCall: 9152987821</strong>.
+          </p>
+        </div>
       </div>
     );
   }
@@ -98,8 +103,8 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
             <label className="block text-xs font-bold text-[#708090] ml-2 mb-1">OFFICIAL EMAIL</label>
-            <input 
-              type="email" 
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. mba.rohan@spjimr.org"
@@ -110,27 +115,34 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
             {error && <p className="text-xs text-red-500 mt-2 ml-2">{error}</p>}
           </div>
 
-          <button 
+          <button
             type="submit"
             disabled={isAuthenticating}
             className="w-full bg-[#8A9A5B] text-white py-4 rounded-xl font-bold shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex justify-center items-center gap-2"
           >
             {isAuthenticating ? (
-                <>
+              <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 Authenticating...
-                </>
+              </>
             ) : "Authenticate"}
           </button>
         </form>
-        
-        <div className="mt-8 text-center text-xs text-slate-400">
-          <p className="font-bold mb-2">Quick Sign-in</p>
-          <div className="flex justify-center gap-2">
-            <button onClick={() => handleQuickLogin('pgp25.govardhan@spjimr.org', 'student')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Student</button>
-            <button onClick={() => handleQuickLogin('dimple.wagle@spjimr.org', 'counselor')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Counselor</button>
-            <button onClick={() => handleQuickLogin('admin@spjimr.org', 'admin')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Admin</button>
-          </div>
+
+        <div className="mt-6 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-700 leading-relaxed">
+          <p className="font-bold mb-0.5">⚕️ Medical Disclaimer</p>
+          <p>SPeakUp is a <strong>wellness companion</strong>, not a clinical tool. It does not provide medical diagnoses or replace a qualified mental health professional. For urgent support: <strong>iCall 9152987821</strong> (Mon–Sat, 8am–10pm).</p>
+        </div>
+
+        <div className="mt-2 p-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] text-slate-400 flex items-center gap-1.5">
+          <span>🔒</span>
+          <span>All your data is stored locally on this device and encrypted. AI responses use Google Gemini free API.</span>
+        </div>
+        <p className="font-bold mb-2">Quick Sign-in</p>
+        <div className="flex justify-center gap-2">
+          <button onClick={() => handleQuickLogin('pgp25.govardhan@spjimr.org', 'student')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Student</button>
+          <button onClick={() => handleQuickLogin('dimple.wagle@spjimr.org', 'counselor')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Counselor</button>
+          <button onClick={() => handleQuickLogin('admin@spjimr.org', 'admin')} className="bg-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs hover:bg-slate-300 transition-colors">Admin</button>
         </div>
       </div>
     </div>

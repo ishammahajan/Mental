@@ -14,7 +14,7 @@ export interface User {
 
 export interface Message {
   id: string;
-  role: 'user' | 'model' | 'agent'; 
+  role: 'user' | 'model' | 'agent';
   text: string;
   timestamp: Date;
   metadata?: {
@@ -113,4 +113,13 @@ export interface WeatherData {
   temp: number;
   condition: string;
   aqi: number;
+}
+
+export interface WellnessPost {
+  id: string;
+  title: string;
+  body: string;        // Rich text (supports emoji, line breaks)
+  authorName: string;
+  postedAt: string;    // ISO date string
+  isPinned?: boolean;
 }

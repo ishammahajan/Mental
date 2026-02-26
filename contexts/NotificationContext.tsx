@@ -1,14 +1,21 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
-interface Notification {
+export interface Notification {
   id: number;
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
+  timestamp: Date | string;
+  isRead: boolean;
 }
 
 interface NotificationContextType {
-  notifications: Notification[];
-  addNotification: (message: string, type: 'success' | 'error' | 'info') => void;
+  notifications: Notification[];       // toast (auto-dismiss)
+  storedNotifications: Notification[]; // persists in bell dropdown
+  unreadCount: number;
+  addNotification: (message: string, type: 'success' | 'error' | 'info' | 'warning', userId?: string) => void;
+  markAllRead: () => void;
+  clearAll: () => void;
+  clearOne: (id: number) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -23,25 +30,76 @@ export const useNotification = () => {
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [storedNotifications, setStoredNotifications] = useState<Notification[]>([]);
 
-  const addNotification = (message: string, type: 'success' | 'error' | 'info') => {
-    const id = new Date().getTime();
-    setNotifications(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
+  // Load initial notifications for Counselor
+  useEffect(() => {
+    const data = localStorage.getItem('speakup_cloud_notifications');
+    if (data) {
+      setStoredNotifications(JSON.parse(data));
+    }
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      const channel = new BroadcastChannel('speakup_sync');
+      channel.onmessage = (e) => {
+        if (e.data?.key === 'speakup_cloud_notifications') {
+          const fresh = localStorage.getItem('speakup_cloud_notifications');
+          if (fresh) setStoredNotifications(JSON.parse(fresh));
+        }
+      };
+      return () => channel.close();
+    }
+  }, []);
+
+  const syncStored = (newNotes: Notification[]) => {
+    setStoredNotifications(newNotes);
+    localStorage.setItem('speakup_cloud_notifications', JSON.stringify(newNotes));
+    if (typeof BroadcastChannel !== 'undefined') {
+      new BroadcastChannel('speakup_sync').postMessage({ key: 'speakup_cloud_notifications' });
+    }
   };
 
+  const addNotification = (message: string, type: 'success' | 'error' | 'info' | 'warning', userId?: string) => {
+    const id = new Date().getTime();
+    const notification: Notification = { id, message, type, timestamp: new Date().toISOString(), isRead: false };
+
+    // Add to toasts (auto-dismiss) for local user only if it wasn't targeted
+    if (!userId) {
+      setNotifications(prev => [...prev, notification]);
+      setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
+    }
+
+    // Persist in stored list
+    syncStored([notification, ...storedNotifications].slice(0, 50));
+  };
+
+  const markAllRead = () => syncStored(storedNotifications.map(n => ({ ...n, isRead: true })));
+  const clearAll = () => syncStored([]);
+  const clearOne = (id: number) => syncStored(storedNotifications.filter(n => n.id !== id));
+
+  const unreadCount = storedNotifications.filter(n => !n.isRead).length;
+
   return (
-    <NotificationContext.Provider value={{ notifications, addNotification }}>
+    <NotificationContext.Provider value={{
+      notifications,
+      storedNotifications,
+      unreadCount,
+      addNotification,
+      markAllRead,
+      clearAll,
+      clearOne,
+    }}>
       {children}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
+      {/* Toast popups */}
+      <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
         {notifications.map(notification => (
-          <div key={notification.id} className={`p-4 rounded-lg shadow-lg text-white animate-in slide-in-from-top duration-300 ${
-            notification.type === 'success' ? 'bg-green-500' :
-            notification.type === 'error' ? 'bg-red-500' :
-            'bg-blue-500'
-          }`}>
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg text-white animate-in slide-in-from-top duration-300 pointer-events-auto ${notification.type === 'success' ? 'bg-green-500' :
+              notification.type === 'error' ? 'bg-red-500' :
+                'bg-blue-500'
+              }`}
+          >
             {notification.message}
           </div>
         ))}
