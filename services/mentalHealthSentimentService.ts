@@ -13,7 +13,7 @@
 
 const HF_MODEL = 'j-hartmann/emotion-english-distilroberta-base';
 const HF_API_URL = `https://api-inference.huggingface.co/models/${HF_MODEL}`;
-const HF_TOKEN = (import.meta as any).env?.VITE_HF_TOKEN || '';
+const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || '';
 
 export type EmotionLabel = 'anger' | 'disgust' | 'fear' | 'joy' | 'neutral' | 'sadness' | 'surprise';
 

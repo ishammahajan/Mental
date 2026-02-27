@@ -60,7 +60,7 @@ export default function App() {
   };
 
   // Check for API Key at the top level
-  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     return <NoApiKeyFallback />;
   }

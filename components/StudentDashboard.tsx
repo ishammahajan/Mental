@@ -540,7 +540,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
         {apiError && (
           <div className="mx-4 mb-2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3 animate-in slide-in-from-top shadow-md">
             <Key size={20} className="mt-1 flex-shrink-0" />
-            <div><h3 className="font-bold text-sm">Authentication Error</h3><p className="text-xs">The AI Token has expired or is invalid. Please update your <code>GEMINI_API_KEY</code>.</p></div>
+            <div><h3 className="font-bold text-sm">Authentication Error</h3><p className="text-xs">The AI Token has expired or is invalid. Please update your <code>VITE_GEMINI_API_KEY</code>.</p></div>
           </div>
         )}
 

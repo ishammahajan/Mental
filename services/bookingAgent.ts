@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getAvailableSlotsTool, bookSlotTool } from "../tools/bookingTools";
 import * as db from "./storage";
 
-const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY || '';
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 
 let ai: GoogleGenAI | undefined;
 

@@ -11,7 +11,7 @@ import { VibeType, WeatherData } from "../types";
 import { analyzeMentalHealthText } from "./mentalHealthSentimentService";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const HF_TOKEN = (import.meta as any).env?.VITE_HF_TOKEN || '';
+const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || '';
 const HF_MODEL = 'Qwen/Qwen2.5-7B-Instruct';
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
 

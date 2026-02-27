@@ -36,8 +36,7 @@ export default function NoApiKeyFallback() {
           color: '#333',
           overflowX: 'auto',
         }}>
-{`GEMINI_API_KEY=your_key_here
-API_KEY=your_key_here`}
+          {`VITE_GEMINI_API_KEY=your_key_here`}
         </pre>
         <p style={{ color: '#888', fontSize: '13px', marginTop: '20px' }}>
           Get a free key at{' '}
