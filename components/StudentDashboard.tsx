@@ -154,6 +154,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   const [odyssey, setOdyssey] = useState<{ open: boolean; type: 'GAD7' | 'BDI' | string }>({ open: false, type: 'GAD7' });
   const [forgedGames, setForgedGames] = useState<Record<string, GameMetadata>>({});
 
+  // RAG Smart Toolkits
+  const [recommendedToolkits, setRecommendedToolkits] = useState<any[]>([]);
+
   // Two-counselor selector
   const [selectedCounselor, setSelectedCounselor] = useState<typeof COUNSELORS[0] | null>(null);
   const [showCounselorPicker, setShowCounselorPicker] = useState(false);
@@ -176,6 +179,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   useEffect(() => {
     const handleUnload = () => clearSParshHistory(userId);
     window.addEventListener('beforeunload', handleUnload);
+
+    // Fetch initial toolkits from RAG
+    import('../services/pineconeService').then(({ queryToolkit }) => {
+      queryToolkit('stress anxiety burnout coping grounding focus', 3)
+        .then(res => setRecommendedToolkits(res))
+        .catch(err => console.warn('RAG Toolkit Error:', err));
+    });
+
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [userId]);
 
@@ -684,6 +695,29 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   Open Quest Hub
                 </button>
               </div>
+
+              {/* RAG Recommended Toolkits (Phase 1) */}
+              {recommendedToolkits.length > 0 && (
+                <div className="flex-shrink-0 bg-gradient-to-br from-[#8A9A5B]/10 to-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles size={18} className="text-[#8A9A5B]" />
+                    <h3 className="font-bold text-[#708090] text-lg">Recommended For You</h3>
+                    <span className="text-[10px] bg-[#8A9A5B]/20 text-[#8A9A5B] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">AI Curated</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {recommendedToolkits.map((tk, idx) => (
+                      <div key={idx} className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-white flex flex-col">
+                        <p className="text-sm font-medium text-slate-700 leading-relaxed mb-3 flex-1">{tk.text}</p>
+                        <div className="flex flex-wrap gap-1 mt-auto">
+                          {tk.tags?.map((tag: string, tidx: number) => (
+                            <span key={tidx} className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md uppercase tracking-wide">#{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Middle Row: Wellness Wall (Ribbon View) */}
               <div className="flex-shrink-0">

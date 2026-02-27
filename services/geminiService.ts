@@ -162,7 +162,19 @@ export const sendMessageToSParsh = async (
     };
   }
 
-  const messages = buildMessages(SPARSH_SYSTEM_INSTRUCTION, history, newMessage);
+  // Query RAG Toolkit dynamically based on user message
+  let ragContext = '';
+  try {
+    const { queryToolkit } = await import('./pineconeService');
+    const tools = await queryToolkit(newMessage, 2);
+    if (tools.length > 0) {
+      ragContext = `\n\n[RAG INTELLIGENCE]: The database retrieved these suggested coping mechanisms highly relevant to the user's input. WEAVE one of these naturally into your response to help the user:\n` + tools.map((t: any) => `- ${t.text}`).join('\n');
+    }
+  } catch (e) {
+    console.warn('RAG extraction failed', e);
+  }
+
+  const messages = buildMessages(SPARSH_SYSTEM_INSTRUCTION + ragContext, history, newMessage);
   let rawText: string | null = null;
   let modelUsed: SParshResponse['modelUsed'] = 'offline';
 
