@@ -14,7 +14,10 @@ ARG GEMINI_API_KEY
 ENV API_KEY=$API_KEY
 ENV GEMINI_API_KEY=$GEMINI_API_KEY
 
-RUN npm run build
+RUN echo "=== Build-time env check ===" \
+    && echo "API_KEY:        ${API_KEY:+[SET]}${API_KEY:-[NOT SET - API calls will fail]}" \
+    && echo "GEMINI_API_KEY: ${GEMINI_API_KEY:+[SET]}${GEMINI_API_KEY:-[NOT SET - AI features will fail]}" \
+    && npm run build
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
