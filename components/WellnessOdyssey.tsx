@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import { Shield, Star, Sparkles, ChevronRight, Download, RotateCcw, Zap, Heart, Brain } from 'lucide-react';
-import { saveSurveyResult, SurveyResult } from '../services/storage';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid } from 'recharts';
+import { Shield, Star, Sparkles, ChevronRight, Download, RotateCcw, Zap, Heart, Brain, MessageSquare, Calendar as CalendarIcon } from 'lucide-react';
+import { saveSurveyResult, getSurveyResults, SurveyResult } from '../services/storage';
+import * as db from '../services/storage';
 import { useNotification } from '../contexts/NotificationContext';
 
 // ─── Survey Data ─────────────────────────────────────────────────────────────
@@ -142,6 +143,8 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
     const [answers, setAnswers] = useState<number[]>([]);
     const [shuffledOptions, setShuffledOptions] = useState(FREQUENCY_OPTIONS);
     const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+    const [historicalScores, setHistoricalScores] = useState<SurveyResult[]>([]);
+    const [sharingSent, setSharingSent] = useState(false);
 
     useEffect(() => {
         setShuffledOptions([...FREQUENCY_OPTIONS].sort(() => Math.random() - 0.5));
@@ -187,15 +190,10 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
             setSurveyResult(result);
             saveSurveyResult(result);
 
-            // Notify counselor if severity is Moderate or Severe
-            const severity = getSeverity(score, maxScore, surveyType);
-            if (severity.stage >= 3) {
-                addNotification(
-                    `🚨 URGENT WELLNESS ALERT: ${userId} scored ${score}/${maxScore} (${severity.label}) on the ${surveyType} assessment.`,
-                    'warning',
-                    'counselor_dimple_wagle'
-                );
-            }
+            // Load historical scores for trend chart
+            getSurveyResults(userId).then(all => {
+                setHistoricalScores(all.filter(r => r.surveyType === surveyType));
+            });
 
             setStage('soul_map');
         } else {
@@ -219,7 +217,53 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
     };
 
     const handleDownload = () => {
-        window.print();
+        if (!surveyResult) return;
+        const severity = getSeverity(surveyResult.score, maxScore, surveyType);
+        const domains = domainScores();
+        const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/>
+<title>Wellness Odyssey Report – ${surveyType}</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; max-width: 700px; margin: 40px auto; color: #1e293b; font-size: 14px; line-height: 1.6; }
+  h1 { color: #0d2d1a; font-size: 24px; } h2 { color: #065f46; font-size: 16px; margin-top: 24px; }
+  .badge { display: inline-block; padding: 4px 14px; border-radius: 9999px; font-weight: 700; font-size: 13px; color: white; background: ${severity.color}; }
+  .score-row { display: flex; justify-content: space-between; background: #f0fdf4; padding: 16px; border-radius: 12px; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th { background: #065f46; color: white; padding: 8px 12px; text-align: left; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even) { background: #f8fafc; }
+  .bar-wrap { background: #e2e8f0; border-radius: 99px; height: 12px; }
+  .bar-fill { height: 12px; border-radius: 99px; background: #10b981; }
+  .footer { margin-top: 32px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+  @media print { button { display: none; } }
+</style>
+</head><body>
+<h1>🗺️ Wellness Odyssey Report</h1>
+<p><strong>Survey:</strong> ${surveyType === 'GAD7' ? 'GAD-7 Anxiety Assessment' : 'BDI-II Depression Inventory'}</p>
+<p><strong>Completed:</strong> ${new Date(surveyResult.completedAt).toLocaleString('en-IN')}</p>
+<p><strong>User ID:</strong> ${surveyResult.userId}</p>
+
+<div class="score-row">
+  <div><strong>Score</strong><br/><span style="font-size:28px;font-weight:900">${surveyResult.score}</span> / ${maxScore}</div>
+  <div><strong>Severity</strong><br/><span class="badge">${severity.label}</span></div>
+  <div><strong>XP Earned</strong><br/><span style="font-size:28px;font-weight:900;color:#d97706">${xp} XP</span></div>
+</div>
+
+<h2>Domain Wellness Breakdown</h2>
+<table>
+  <tr><th>Domain</th><th>Wellness Score</th><th>Progress</th></tr>
+  ${domains.map(d => `<tr><td>${d.domain}</td><td>${d.wellness}%</td><td><div class="bar-wrap"><div class="bar-fill" style="width:${d.wellness}%"></div></div></td></tr>`).join('')}
+</table>
+
+<h2>Clinical Disclaimer</h2>
+<p>⚕️ This is a <strong>wellness awareness tool</strong>, not a clinical diagnosis. If you scored Moderate or Severe, please consider speaking with a counselor. Your results are private and encrypted on your device.</p>
+<p>In a crisis? Call <strong>iCall: 9152987821</strong></p>
+
+<div class="footer">Generated by SPeakUp Mental Health Platform · SPJIMR · ${new Date().toLocaleDateString('en-IN')}</div>
+<script>window.onload = () => window.print();</script>
+</body></html>`;
+        const win = window.open('', '_blank');
+        if (win) { win.document.write(html); win.document.close(); }
     };
 
     // ─── INTRO ───────────────────────────────────────────────────────────────
@@ -337,6 +381,74 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
                         <div className="bg-amber-900/40 border border-amber-500/30 rounded-xl p-4 mb-6 text-xs text-amber-300">
                             ⚕️ <strong>Clinical Note:</strong> This is a wellness awareness tool, not a clinical diagnosis. If you scored Moderate or Severe, please consider speaking with the counselor. Your results are stored locally and encrypted.
                         </div>
+
+                        {/* Historical Trend Chart */}
+                        {historicalScores.length > 1 && (
+                            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
+                                <h3 className="text-white font-bold mb-4 text-center">📈 Your Score Over Time</h3>
+                                <ResponsiveContainer width="100%" height={160}>
+                                    <LineChart data={historicalScores.slice().reverse().slice(-10).map((r, i) => ({
+                                        attempt: `Attempt ${i + 1}`,
+                                        date: new Date(r.completedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+                                        score: r.score,
+                                        max: r.maxScore,
+                                    }))} margin={{ top: 5, right: 10, bottom: 5, left: -20 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                        <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                                        <YAxis domain={[0, maxScore]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                                        <Tooltip
+                                            contentStyle={{ background: '#1e293b', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }}
+                                            formatter={(value: number) => [value, 'Score']}
+                                        />
+                                        <Line type="monotone" dataKey="score" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 4 }} activeDot={{ r: 6 }} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                                <p className="text-[10px] text-slate-400 text-center mt-2">Last {Math.min(historicalScores.length, 10)} attempts shown</p>
+                            </div>
+                        )}
+
+                        {/* Share with counselor / Book CTAs (student-initiated only, Moderate+) */}
+                        {severity.stage >= 3 && (
+                            <div className="bg-white/8 border border-white/15 rounded-2xl p-5 mb-6">
+                                <p className="text-white text-sm font-bold mb-1.5 text-center">
+                                    {severity.stage >= 4
+                                        ? 'Your score suggests it may help to connect with someone soon.'
+                                        : 'Talking to someone can help.'}
+                                </p>
+                                <p className="text-slate-400 text-xs text-center mb-4">
+                                    {severity.stage >= 4
+                                        ? 'Here are two easy options — there is absolutely no pressure. You are in control.'
+                                        : 'You can share this result or book a check-in session — completely your choice.'}
+                                </p>
+                                <div className="flex gap-3 justify-center flex-wrap">
+                                    <button
+                                        disabled={sharingSent}
+                                        onClick={async () => {
+                                            await db.sendP2PMessage({
+                                                id: Date.now().toString(),
+                                                senderId: userId,
+                                                receiverId: 'counselor_dimple_wagle',
+                                                text: `📊 I completed the ${surveyType} Wellness Odyssey and wanted to share my result with you. Score: ${surveyResult?.score}/${maxScore} (${severity.label}). Date: ${new Date().toLocaleDateString('en-IN')}.`,
+                                                timestamp: new Date().toISOString(),
+                                                isRead: false,
+                                            });
+                                            setSharingSent(true);
+                                            addNotification('Score shared with your counsellor 💚', 'success');
+                                        }}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm border border-white/20 transition-all disabled:opacity-50"
+                                    >
+                                        <MessageSquare size={15} />
+                                        {sharingSent ? 'Shared ✓' : 'Share with counsellor'}
+                                    </button>
+                                    <button
+                                        onClick={onClose}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm border border-white/20 transition-all"
+                                    >
+                                        <CalendarIcon size={15} /> Book a Session
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex gap-3 justify-center">
                             <button onClick={handleDownload} className="flex items-center gap-2 px-5 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm border border-white/20 transition-all">

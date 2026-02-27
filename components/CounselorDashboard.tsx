@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 import EnvironmentWidget from './EnvironmentWidget';
+import CounselorReportModal from './CounselorReportModal';
 import { AlertTriangle, Clock, Activity, Bell, FilePlus, ClipboardList, PlusCircle, Trash2, CheckCircle, XCircle, LogOut, MessageSquare, Send, Mail, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, X, Newspaper, Pin, ShieldAlert } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as db from '../services/storage';
+import { deleteTask } from '../services/storage';
 import { AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
 import ConsentForm from './ConsentForm';
 import { useNotification } from '../contexts/NotificationContext';
@@ -53,7 +55,7 @@ const downloadConsentAsPDF = async (slotId: string) => {
 };
 
 const CounselorDashboard: React.FC = () => {
-  const { addNotification, storedNotifications, unreadCount, markAllRead, clearAll, clearOne } = useNotification();
+  const { addNotification, storedNotifications, unreadCount: contextUnreadCount, markAllRead, clearAll, clearOne } = useNotification();
   const [showBellDropdown, setShowBellDropdown] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
   const [students, setStudents] = useState<User[]>([]);
@@ -61,11 +63,11 @@ const CounselorDashboard: React.FC = () => {
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
 
   // Modals
-
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
   const [showInboxModal, setShowInboxModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Input States
   const [taskInput, setTaskInput] = useState('');
@@ -112,11 +114,16 @@ const CounselorDashboard: React.FC = () => {
     if (changedKey.startsWith('speakup_cloud_posts')) {
       setPosts(await db.getAllPosts());
     }
+    if (changedKey.startsWith('speakup_cloud_tasks')) {
+      // Instant casefile task refresh when student tab updates
+      setStudentTasks(await db.getCounselorAssignedTasks());
+    }
     if (changedKey.startsWith('speakup_cloud_p2p')) {
       const convos = await db.getCounselorConversations('counselor_dimple_wagle');
       setConversations(convos);
       setTotalUnread(convos.reduce((acc, c) => acc + c.unreadCount, 0));
-      if (showChatModal && selectedStudent) {
+      // Instantly refresh the active P2P chat window
+      if (selectedStudent) {
         setChatHistory(await db.getP2PThread('counselor_dimple_wagle', selectedStudent));
       }
     }
@@ -239,20 +246,51 @@ const CounselorDashboard: React.FC = () => {
   const handleAssignTask = async () => {
     if (!taskInput.trim() || !selectedStudent) return;
 
-    // Find the student's email
     const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
     if (!student) return;
 
     await db.assignTask(student.email, {
       id: Date.now().toString(),
       title: taskInput.trim(),
-      description: "Prescribed activity.",
+      description: 'Prescribed activity.',
       isCompleted: false,
-      assignedBy: "counselor_dimple_wagle"
+      assignedBy: 'counselor_dimple_wagle',
     });
+
+    // Instantly refresh casefile without waiting for next poll
+    const updated = await db.getCounselorAssignedTasks();
+    setStudentTasks(updated);
+
     setTaskInput('');
     setShowTaskModal(false);
-    alert("Task Assigned.");
+    addNotification(`Task assigned to ${student.name || student.email} ✅`, 'success');
+  };
+
+  const handleClearTask = async (taskId: string) => {
+    if (!selectedStudent) return;
+    const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
+    if (!student) return;
+    await deleteTask(student.email, taskId);
+    const updated = await db.getCounselorAssignedTasks();
+    setStudentTasks(updated);
+  };
+
+  const handleSendFollowUpNudge = async () => {
+    if (!selectedStudent) return;
+    const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
+    if (!student) return;
+    addNotification(
+      `💬 Follow-up nudge sent to ${student.name || student.email}`,
+      'success',
+      'student',
+      student.id
+    );
+    addNotification(
+      'Your counsellor is checking in on you 💚 How have you been feeling? If you\'d like to book a follow-up session, tap the Slot Booking tab.',
+      'info',
+      'student',
+      student.id
+    );
   };
 
   const handlePublishSlot = async () => {
@@ -338,6 +376,15 @@ const CounselorDashboard: React.FC = () => {
             )}
           </div>
 
+          {/* Download Report */}
+          <button
+            onClick={() => setShowReportModal(true)}
+            title="Download interaction metrics report"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8A9A5B]/10 hover:bg-[#8A9A5B]/20 text-[#8A9A5B] rounded-lg text-xs font-bold border border-[#8A9A5B]/30 transition-colors"
+          >
+            <Download size={14} /> Report
+          </button>
+
           {/* Bell Notification Dropdown */}
           <div className="relative" ref={bellRef}>
             <button
@@ -345,9 +392,9 @@ const CounselorDashboard: React.FC = () => {
               className="p-2 hover:bg-gray-100 rounded-full transition-colors relative"
             >
               <Bell className="text-slate-500 hover:text-slate-800" size={20} />
-              {(unreadCount > 0 || pendingRequests > 0) && (
+              {(contextUnreadCount('counselor', '') > 0 || pendingRequests > 0) && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full animate-bounce">
-                  {unreadCount + pendingRequests > 9 ? '9+' : unreadCount + pendingRequests}
+                  {contextUnreadCount('counselor', '') + pendingRequests > 9 ? '9+' : contextUnreadCount('counselor', '') + pendingRequests}
                 </span>
               )}
             </button>
@@ -367,10 +414,10 @@ const CounselorDashboard: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  {storedNotifications.length === 0 && pendingRequests === 0 ? (
+                  {storedNotifications.filter(n => !n.targetRole || n.targetRole === 'counselor').length === 0 && pendingRequests === 0 ? (
                     <p className="text-center text-slate-400 text-sm py-8">No notifications yet</p>
                   ) : (
-                    storedNotifications.map(n => (
+                    storedNotifications.filter(n => !n.targetRole || n.targetRole === 'counselor').map(n => (
                       <div key={n.id} className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-0 border-l-4 ${n.type === 'success' ? 'bg-green-50 border-l-green-400 text-green-700' :
                         n.type === 'error' ? 'bg-red-50 border-l-red-400 text-red-700' :
                           'bg-blue-50 border-l-blue-400 text-blue-700'
@@ -444,6 +491,9 @@ const CounselorDashboard: React.FC = () => {
                 <button onClick={() => setShowChatModal(true)} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#8A9A5B] text-white rounded-md hover:bg-[#728248] shadow-sm transition-colors disabled:opacity-50">
                   <MessageSquare size={14} /> Chat
                 </button>
+                <button onClick={handleSendFollowUpNudge} disabled={!selectedStudent} title="Send a gentle follow-up notification to this student" className="flex items-center gap-2 px-3 py-1.5 text-sm bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors">
+                  <Bell size={14} /> Follow-Up Nudge
+                </button>
               </div>
             </div>
 
@@ -480,6 +530,11 @@ const CounselorDashboard: React.FC = () => {
                         <p className={`text-xs font-medium leading-snug ${task.isCompleted ? 'text-green-700 line-through' : 'text-slate-700'}`}>{task.title}</p>
                         <p className="text-[10px] text-slate-400 mt-0.5">{task.isCompleted ? '✓ Completed' : 'In progress'}</p>
                       </div>
+                      {task.isCompleted && (
+                        <button onClick={() => handleClearTask(task.id)} title="Clear completed task" className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-0.5 rounded-md hover:bg-red-50 transition-colors flex-shrink-0">
+                          Clear
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -780,6 +835,9 @@ const CounselorDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Counselor Report Modal */}
+      {showReportModal && <CounselorReportModal onClose={() => setShowReportModal(false)} />}
 
     </div>
   );

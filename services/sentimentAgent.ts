@@ -3,8 +3,10 @@ import * as db from './storage';
 import { handleBookingRequest } from './bookingAgent';
 import { analyzeMentalHealthText } from './mentalHealthSentimentService';
 
-const HF_TOKEN = (import.meta as any).env?.VITE_HF_TOKEN || '';
-const HF_AGENT_MODEL = 'mistralai/Mistral-7B-Instruct-v0.3';
+const IS_PRODUCTION = window.location.hostname !== 'localhost';
+const PROXY_URL = IS_PRODUCTION
+  ? 'https://speakup-backend.up.railway.app/api/chat'
+  : 'http://localhost:3001/api/chat';
 
 export const analyzeSentimentAndSchedule = async (
   userId: string,
@@ -35,7 +37,7 @@ export const analyzeSentimentAndSchedule = async (
   const conversationLog = recentMessages.slice(-6).map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n');
 
   // ─── Stage 2: HuggingFace Mistral for nuanced text reasoning & action selection ──────
-  if (!HF_TOKEN) return null;
+  // ─── Stage 2: HuggingFace Mistral for nuanced text reasoning & action selection ──────
 
   try {
     const systemPrompt = `
@@ -60,16 +62,18 @@ export const analyzeSentimentAndSchedule = async (
       }
     `;
 
-    const res = await fetch(`https://api-inference.huggingface.co/models/${HF_AGENT_MODEL}/v1/chat/completions`, {
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Context: ${conversationLog}` }
+    ];
+
+    const res = await fetch(PROXY_URL, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: HF_AGENT_MODEL,
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: conversationLog }],
-        max_tokens: 256,
-        temperature: 0.2
-      }),
-      signal: AbortSignal.timeout(12000),
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messages }),
+      signal: AbortSignal.timeout(10000)
     });
 
     if (!res.ok) throw new Error("HF Agent failed");

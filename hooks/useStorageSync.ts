@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 
 /**
  * useStorageSync — Real-time sync via BroadcastChannel API.
@@ -22,7 +22,8 @@ export const useStorageSync = (
     onSync: (changedKey: string) => void,
     watchKeys: string[] = SYNC_KEYS
 ) => {
-    const stableOnSync = useCallback(onSync, []);
+    const onSyncRef = useRef(onSync);
+    useEffect(() => { onSyncRef.current = onSync; }, [onSync]);
 
     useEffect(() => {
         if (typeof BroadcastChannel === 'undefined') return;
@@ -33,9 +34,9 @@ export const useStorageSync = (
             const { key } = e.data || {};
             if (!key) return;
             const matched = watchKeys.some(wk => key.startsWith(wk));
-            if (matched) stableOnSync(key);
+            if (matched) onSyncRef.current(key);
         };
 
         return () => channel.close();
-    }, [stableOnSync]);
+    }, []);
 };

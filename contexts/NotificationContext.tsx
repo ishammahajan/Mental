@@ -6,13 +6,15 @@ export interface Notification {
   type: 'success' | 'error' | 'info' | 'warning';
   timestamp: Date | string;
   isRead: boolean;
+  targetRole?: 'counselor' | 'student' | 'admin';
+  targetUserId?: string;
 }
 
 interface NotificationContextType {
   notifications: Notification[];       // toast (auto-dismiss)
   storedNotifications: Notification[]; // persists in bell dropdown
-  unreadCount: number;
-  addNotification: (message: string, type: 'success' | 'error' | 'info' | 'warning', userId?: string) => void;
+  unreadCount: (role: string, uid: string) => number;
+  addNotification: (message: string, type: 'success' | 'error' | 'info' | 'warning', targetRole?: 'counselor' | 'student' | 'admin', targetUserId?: string) => void;
   markAllRead: () => void;
   clearAll: () => void;
   clearOne: (id: number) => void;
@@ -59,12 +61,12 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     }
   };
 
-  const addNotification = (message: string, type: 'success' | 'error' | 'info' | 'warning', userId?: string) => {
+  const addNotification = (message: string, type: 'success' | 'error' | 'info' | 'warning', targetRole?: 'counselor' | 'student' | 'admin', targetUserId?: string) => {
     const id = new Date().getTime();
-    const notification: Notification = { id, message, type, timestamp: new Date().toISOString(), isRead: false };
+    const notification: Notification = { id, message, type, timestamp: new Date().toISOString(), isRead: false, targetRole, targetUserId };
 
-    // Add to toasts (auto-dismiss) for local user only if it wasn't targeted
-    if (!userId) {
+    // Toast popups only for the current local user if it's untargeted or targeted correctly (we check rendering later)
+    if (!targetRole && !targetUserId) {
       setNotifications(prev => [...prev, notification]);
       setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
     }
@@ -77,7 +79,12 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const clearAll = () => syncStored([]);
   const clearOne = (id: number) => syncStored(storedNotifications.filter(n => n.id !== id));
 
-  const unreadCount = storedNotifications.filter(n => !n.isRead).length;
+  const unreadCount = (role: string, uid: string) => storedNotifications.filter(n => {
+    if (n.isRead) return false;
+    if (n.targetRole && n.targetRole !== role) return false;
+    if (n.targetUserId && n.targetUserId !== uid) return false;
+    return true;
+  }).length;
 
   return (
     <NotificationContext.Provider value={{

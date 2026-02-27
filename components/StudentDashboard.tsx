@@ -13,7 +13,7 @@ import * as db from '../services/storage';
 import { useSParsh } from '../contexts/SParshContext';
 import { useNotification } from '../contexts/NotificationContext';
 import OnboardingTour from './OnboardingTour';
-import { getUser, updateUser } from '../services/storage';
+import { getUser, updateUser, clearSParshHistory } from '../services/storage';
 import { useStorageSync } from '../hooks/useStorageSync';
 import { COUNSELORS } from '../constants';
 
@@ -59,34 +59,52 @@ const downloadConsentAsPDF = async (slotId: string) => {
   if (win) { win.document.write(html); win.document.close(); }
 };
 
-// ─── Wall Post Card ────────────────────────────────────────────────────────
 const WallPostCard: React.FC<{ post: WellnessPost }> = ({ post }) => {
   const [expanded, setExpanded] = useState(false);
   const lines = post.body.split('\n');
   const isLong = lines.length > 5 || post.body.length > 400;
-  const preview = isLong && !expanded ? post.body.slice(0, 380) + '…' : post.body;
+  const preview = isLong ? post.body.slice(0, 380) + '…' : post.body;
 
   return (
-    <div className={`rounded-2xl p-5 shadow-sm border ${post.isPinned ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'} transition-all`}>
-      {post.isPinned && (
-        <div className="flex items-center gap-1 text-amber-600 text-[11px] font-bold uppercase tracking-wider mb-2">
-          <Pin size={11} /> Pinned
+    <>
+      <div className={`rounded-2xl p-5 shadow-sm border cursor-pointer hover:shadow-md ${post.isPinned ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'} transition-all h-full flex flex-col`} onClick={() => isLong && setExpanded(true)}>
+        {post.isPinned && (
+          <div className="flex items-center gap-1 text-amber-600 text-[11px] font-bold uppercase tracking-wider mb-2">
+            <Pin size={11} /> Pinned
+          </div>
+        )}
+        <h3 className="font-bold text-[#708090] text-base mb-1 leading-snug">{post.title}</h3>
+        <p className="text-[11px] text-slate-400 mb-3">
+          📝 {post.authorName} · {new Date(post.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+        </p>
+        <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap flex-1">{preview}</div>
+        {isLong && (
+          <div className="mt-3 flex items-center gap-1 text-[#8A9A5B] text-xs font-bold">
+            Read full post <ChevronRight size={13} />
+          </div>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200" onClick={() => setExpanded(false)}>
+          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            <div className={`p-6 border-b flex justify-between items-start ${post.isPinned ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+              <div>
+                {post.isPinned && <div className="flex items-center gap-1 text-amber-600 text-xs font-bold uppercase tracking-wider mb-2"><Pin size={12} /> Pinned Announcement</div>}
+                <h2 className="text-xl font-black text-[#708090] leading-snug">{post.title}</h2>
+                <p className="text-xs text-slate-500 mt-2">Posted by <strong>{post.authorName}</strong> on {new Date(post.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              </div>
+              <button onClick={() => setExpanded(false)} className="p-2 bg-white rounded-full shadow-sm text-slate-400 hover:text-red-500 hover:scale-105 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto text-slate-700 leading-relaxed whitespace-pre-wrap text-sm md:text-base scrollbar-hide">
+              {post.body}
+            </div>
+          </div>
         </div>
       )}
-      <h3 className="font-bold text-[#708090] text-base mb-1 leading-snug">{post.title}</h3>
-      <p className="text-[11px] text-slate-400 mb-3">
-        📝 {post.authorName} · {new Date(post.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-      </p>
-      <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{preview}</div>
-      {isLong && (
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className="mt-2 flex items-center gap-1 text-[#8A9A5B] text-xs font-bold hover:underline"
-        >
-          {expanded ? <><ChevronUp size={13} /> Show less</> : <><ChevronDown size={13} /> Read more</>}
-        </button>
-      )}
-    </div>
+    </>
   );
 };
 
@@ -137,6 +155,24 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   // Onboarding
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // In-chat slot picker (Feature 3)
+  const [showChatSlotPicker, setShowChatSlotPicker] = useState(false);
+
+  // How It Works overlay (Feature 6)
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [howItWorksSection, setHowItWorksSection] = useState<number | null>(null);
+
+  // Follow-up nudge (Feature 5)
+  const [showFollowUpNudge, setShowFollowUpNudge] = useState(false);
+  const [followUpDays, setFollowUpDays] = useState(0);
+
+  // ── Clear SParsh history on logout or tab close ───────────────────────────
+  useEffect(() => {
+    const handleUnload = () => clearSParshHistory(userId);
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [userId]);
+
   // Close bell dropdown on outside click
   // ── Real-time cross-tab sync (zero-latency, fires on every localStorage change in other tabs)
   useStorageSync(async (changedKey) => {
@@ -165,11 +201,8 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
   // ── Load data on mount + 5-second polling (catches same-tab updates)
   useEffect(() => {
-    // Check onboarding
     const hasSeenOnboarding = localStorage.getItem(`speakup_onboarding_${userId}`);
-    if (!hasSeenOnboarding) {
-      setShowOnboarding(true);
-    }
+    if (!hasSeenOnboarding) setShowOnboarding(true);
 
     const loadData = async () => {
       setIsCloudSyncing(true);
@@ -181,8 +214,29 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       ]);
       setMessages(history);
       setTasks(tasksData);
-      setSlots(slotsData);
       setPosts(postsData);
+
+      // Follow-up nudge: only for students who have a prior confirmed booking
+      const dismissedUntil = localStorage.getItem(`speakup_nudge_dismissed_${userId}`);
+      const isDismissed = dismissedUntil && new Date(dismissedUntil) > new Date();
+      if (!isDismissed) {
+        const confirmedSlots = slotsData.filter(s => s.status === 'confirmed' && s.bookedByStudentId === userId);
+        if (confirmedSlots.length > 0) {
+          // Find the most recent confirmed date
+          const pendingOrOpen = slotsData.some(s => s.status === 'requested' && s.bookedByStudentId === userId);
+          if (!pendingOrOpen) {
+            // Sort by slot id (proxy for creation date) to get latest
+            const latestConfirmed = confirmedSlots.sort((a, b) => b.id.localeCompare(a.id))[0];
+            const daysSince = Math.floor((Date.now() - parseInt(latestConfirmed.id)) / (1000 * 60 * 60 * 24));
+            if (daysSince >= 15) {
+              setFollowUpDays(daysSince);
+              setShowFollowUpNudge(true);
+            }
+          }
+        }
+      }
+
+      setSlots(slotsData);
       setIsCloudSyncing(false);
     };
     loadData();
@@ -218,7 +272,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     const validHistory = messages.filter(m => !m.text.includes('Token Limit Reached'));
     const history = validHistory.map(m => ({ role: m.role === 'agent' ? 'model' : m.role, parts: [{ text: m.text }] }));
 
-    const response = await sendMessageToSParsh(history, textToSend, true);
+    const response = await sendMessageToSParsh(history, textToSend);
 
     setIsLoading(false);
     setAvatarState('speaking');
@@ -267,7 +321,15 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     await db.toggleTaskCompletion(userEmail, id);
   };
 
-  const handleBookSlot = (slot: AppointmentSlot) => { setSelectedSlot(slot); setShowConsentModal(true); };
+  const handleBookSlot = (slot: AppointmentSlot) => {
+    const hasActive = slots.some(s => (s.status === 'requested' || s.status === 'confirmed') && s.bookedByStudentId === userId);
+    if (hasActive) {
+      addNotification('You already have an upcoming session booked.', 'error');
+      return;
+    }
+    setSelectedSlot(slot);
+    setShowConsentModal(true);
+  };
 
   const handleConsentSubmit = async (signature: string | File, mobile?: string) => {
     if (mobile) await handleProfileSave({ mobile });
@@ -291,7 +353,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     const success = await db.requestSlot(selectedSlot.id, userId, studentName);
     setIsCloudSyncing(false);
     if (success) { setSlots(await db.getSlots()); addNotification('Slot requested! Awaiting counselor approval.', 'success'); }
-    else addNotification('Failed to request slot.', 'error');
+    else addNotification('Failed to book: This slot was just taken by someone else.', 'error');
     setShowConsentModal(false); setSelectedSlot(null);
   };
 
@@ -356,10 +418,10 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           <div className="relative" ref={bellRef}>
             <button onClick={() => { setShowBellDropdown(v => !v); if (!showBellDropdown) markAllRead(); }}
               className="neu-icon-btn p-3 rounded-full text-[#708090] relative">
-              <Bell size={20} />
-              {unreadCount > 0 && (
+              <Bell className="text-slate-500 hover:text-slate-800" size={20} />
+              {unreadCount('student', userId) > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-bounce border-2 border-[#DCD4C4]">
-                  {unreadCount > 9 ? '9+' : unreadCount}
+                  {unreadCount('student', userId) > 9 ? '9+' : unreadCount('student', userId)}
                 </span>
               )}
             </button>
@@ -370,9 +432,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   <button onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"><Trash2 size={12} /> Clear all</button>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
-                  {storedNotifications.length === 0 ? (
+                  {storedNotifications.filter(n => !n.targetRole || (n.targetRole === 'student' && (!n.targetUserId || n.targetUserId === userId))).length === 0 ? (
                     <p className="text-center text-slate-400 text-sm py-8">No notifications yet</p>
-                  ) : storedNotifications.map(n => (
+                  ) : storedNotifications.filter(n => !n.targetRole || (n.targetRole === 'student' && (!n.targetUserId || n.targetUserId === userId))).map(n => (
                     <div key={n.id} className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-0 ${notifColor(n.type)} border-l-4`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium leading-snug">{n.message}</p>
@@ -386,7 +448,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             )}
           </div>
 
-          <ProfileDropdown user={user} onEditProfile={() => setShowEditProfileModal(true)} onLogout={() => window.location.reload()} />
+          <ProfileDropdown user={user} onEditProfile={() => setShowEditProfileModal(true)} onLogout={() => { clearSParshHistory(userId); window.location.reload(); }} />
         </div>
       </div>
 
@@ -448,10 +510,96 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           {/* ── HOME TAB ─────────────────────────────────────────────────── */}
           {activeTab === 'home' && (
             <div className="w-full h-full flex flex-col gap-4 overflow-y-auto pr-2 scrollbar-hide">
+
+              {/* Follow-up nudge banner (only for prior bookers, 15+ days) */}
+              {showFollowUpNudge && (
+                <div className="flex-shrink-0 bg-[#f0fdf4] border border-[#8A9A5B]/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-in slide-in-from-top duration-500">
+                  <span className="text-2xl">💚</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-[#4a6741] text-sm">
+                      {followUpDays >= 30 ? 'It\'s been a while — how have you been?' : 'Checking in on you'}
+                    </p>
+                    <p className="text-xs text-[#5a7a51] mt-0.5">
+                      {followUpDays >= 30
+                        ? 'It has been over a month since your last session. Would you like to book a follow-up? There\'s no pressure — we\'re here whenever you\'re ready.'
+                        : 'It\'s been a couple of weeks. You don\'t have to wait until things feel overwhelming. Booking a check-in is always a good idea.'}
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('booking')}
+                      className="mt-2 text-[11px] font-bold bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg hover:bg-[#76854d] transition-colors"
+                    >
+                      📅 Book a follow-up session
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const dismissUntil = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+                      localStorage.setItem(`speakup_nudge_dismissed_${userId}`, dismissUntil);
+                      setShowFollowUpNudge(false);
+                    }}
+                    className="text-[#8A9A5B] hover:text-[#4a6741] flex-shrink-0"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
               {/* Top Row: Environment Widget */}
               <div className="flex-shrink-0">
                 <EnvironmentWidget variant="student" />
               </div>
+
+
+
+              {/* Open Slots Strip or Upcoming Meeting Ribbon */}
+              {(() => {
+                const activeSlot = slots.find(s => (s.status === 'requested' || s.status === 'confirmed') && s.bookedByStudentId === userId);
+                if (activeSlot) {
+                  return (
+                    <div className="flex-shrink-0 bg-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm animate-in fade-in zoom-in-95">
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-bold text-[#8A9A5B] flex items-center gap-2">
+                          <Calendar size={16} /> Upcoming Meeting with Counsellor
+                        </h3>
+                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${activeSlot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          {activeSlot.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="bg-white p-2 text-center rounded-xl min-w-[60px] shadow-sm">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{activeSlot.date.split(',')[0].slice(0, 3)}</p>
+                          <p className="font-black text-[#708090] text-lg">{activeSlot.date.split(' ')[1] || activeSlot.date.split(',')[0].slice(-2).replace(/[^0-9]/g, '')}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-[#708090] text-sm">{activeSlot.time}</p>
+                          <p className="text-xs text-slate-500">{COUNSELORS.find(c => c.id === activeSlot.counselorId)?.name || 'Counsellor'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (slots.filter(s => s.status === 'open').length > 0) {
+                  return (
+                    <div className="flex-shrink-0 bg-white/40 p-4 rounded-3xl border border-white/50">
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="font-bold text-[#708090] flex items-center gap-2"><Calendar size={16} /> Available Counselling Slots</h3>
+                        <button onClick={() => setActiveTab('booking')} className="text-[#8A9A5B] text-xs font-bold hover:underline">Book Now</button>
+                      </div>
+                      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+                        {slots.filter(s => s.status === 'open').slice(0, 3).map(slot => (
+                          <button key={slot.id} onClick={() => { handleBookSlot(slot); setActiveTab('booking'); }} className="flex-shrink-0 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 min-w-[140px] text-left hover:scale-105 active:scale-95 transition-transform">
+                            <p className="text-xs text-slate-400 font-bold uppercase">{slot.date}</p>
+                            <p className="font-bold text-[#708090]">{slot.time}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{COUNSELORS.find(c => c.id === slot.counselorId)?.name || 'Counsellor'}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Middle Row: Wellness Wall (Ribbon View) */}
               <div className="flex-shrink-0">
@@ -468,7 +616,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 ) : (
                   <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide snap-x">
                     {posts.map((post, idx) => (
-                      <div key={post.id} className={`snap-start flex-shrink-0 ${idx === 0 ? 'w-[75%] md:w-[60%]' : 'w-[45%] md:w-[35%]'}`}>
+                      <div key={post.id} className={`snap-start flex-shrink-0 ${idx === 0 ? 'w-[85%] md:w-[60%]' : 'w-[55%] md:w-[35%]'}`}>
                         <WallPostCard post={post} />
                       </div>
                     ))}
@@ -476,73 +624,29 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 )}
               </div>
 
-              {/* Open Slots Strip */}
-              {slots.filter(s => s.status === 'open').length > 0 && (
-                <div className="flex-shrink-0 bg-white/40 p-4 rounded-3xl border border-white/50">
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-bold text-[#708090] flex items-center gap-2"><Calendar size={16} /> Available Counselling Slots</h3>
-                    <button onClick={() => setActiveTab('booking')} className="text-[#8A9A5B] text-xs font-bold hover:underline">Book Now</button>
-                  </div>
-                  <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-                    {slots.filter(s => s.status === 'open').slice(0, 3).map(slot => (
-                      <div key={slot.id} className="flex-shrink-0 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 min-w-[140px]">
-                        <p className="text-xs text-slate-400 font-bold uppercase">{slot.date}</p>
-                        <p className="font-bold text-[#708090]">{slot.time}</p>
-                        <p className="text-[10px] text-slate-500 truncate">{COUNSELORS.find(c => c.id === slot.counselorId)?.name || 'Counsellor'}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Bottom Row: Tasks (Left) + Workload Meter (Right) Tiles */}
+              <div className="flex-none grid grid-cols-2 gap-4 min-h-[160px]">
+                {/* Tasks Column - Standard Gradient Tile */}
+                <button onClick={() => setActiveTab('tasks')} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full">
+                  <CheckSquare size={32} className="mb-3 opacity-90" />
+                  <h3 className="font-bold text-lg md:text-xl text-center mb-1">Wellness Quests</h3>
+                  <p className="text-xs md:text-sm opacity-80 text-center">{tasks.filter(t => t.assignedBy !== 'system').length} Active Tasks · Tap</p>
+                </button>
 
-              {/* Bottom Row: Tasks (Left) + Workload Meter (Right) */}
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
-                {/* Tasks Column */}
-                <div className="bg-white/40 rounded-3xl p-4 flex flex-col border border-white/50 overflow-hidden">
-                  <div className="flex justify-between items-center mb-3 flex-shrink-0">
-                    <h3 className="font-bold text-[#708090] flex items-center gap-2">
-                      <CheckSquare size={16} /> Wellness Quests
-                    </h3>
-                    <button onClick={() => setActiveTab('tasks')} className="text-[#8A9A5B] text-xs font-bold hover:underline">View All</button>
+                {/* Workload Meter Column - Standard Gradient Tile */}
+                <button onClick={() => { }} className="bg-gradient-to-br from-[#8A9A5B] to-[#76854d] rounded-3xl p-4 flex flex-col items-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full group relative overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 flex-shrink-0 w-full relative z-10">
+                    <h3 className="font-bold flex items-center gap-1.5 md:gap-2 text-sm md:text-base"><Activity size={16} /> Workload</h3>
+                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">Peak Load</span>
                   </div>
-                  <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-hide">
-                    {/* Inline Quick Quest entry points */}
-                    <button onClick={() => setOdyssey({ open: true, type: 'GAD7' })} className="w-full text-left p-3 rounded-xl bg-indigo-50 border border-indigo-100 hover:border-indigo-300 transition-colors flex items-center justify-between group">
-                      <div>
-                        <p className="text-sm font-bold text-indigo-900">The Anxiety Realm 🌀</p>
-                        <p className="text-[10px] text-indigo-500">GAD-7 Survey</p>
-                      </div>
-                      <ChevronRight size={14} className="text-indigo-300 group-hover:text-indigo-500" />
-                    </button>
-                    {tasks.filter(t => t.assignedBy !== 'system').slice(0, 3).map(task => (
-                      <div key={task.id} className={`p-3 rounded-xl flex items-center gap-3 ${task.isCompleted ? 'bg-white/50 opacity-60' : 'bg-white shadow-sm'}`}>
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${task.isCompleted ? 'border-[#8A9A5B] bg-[#8A9A5B]' : 'border-slate-300'}`}>
-                          {task.isCompleted && <CheckSquare size={10} className="text-white" />}
-                        </div>
-                        <span className={`text-sm truncate ${task.isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.title}</span>
-                      </div>
-                    ))}
-                    {tasks.filter(t => t.assignedBy !== 'system').length === 0 && (
-                      <p className="text-center text-xs text-slate-400 py-2">No active tasks</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Workload Meter Column */}
-                <div className="neu-pressed rounded-3xl p-4 flex flex-col overflow-hidden">
-                  <div className="flex justify-between items-center mb-2 flex-shrink-0">
-                    <h3 className="font-bold text-[#708090] flex items-center gap-2"><Activity size={16} /> Workload Meter</h3>
-                    <span className="text-[10px] bg-[#CC5500]/10 text-[#CC5500] px-2 py-0.5 rounded-full">Peak Load</span>
-                  </div>
-                  <div className="flex-1 min-h-[120px]">
+                  <div className="flex-1 w-full mx-[-10px] mb-[-10px] relative z-10">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
-                        <Tooltip />
-                        <Area type="monotone" dataKey="stress" stroke="#CC5500" fillOpacity={0.2} fill="#CC5500" />
+                        <Area type="monotone" dataKey="stress" stroke="#ffffff" fillOpacity={0.4} fill="#ffffff" />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-                </div>
+                </button>
               </div>
             </div>
           )}
@@ -673,7 +777,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
       {/* ── Chat Window ───────────────────────────────────────────────────── */}
       {isChatOpen && (
-        <div className="fixed bottom-28 right-8 w-96 h-[62vh] bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl flex flex-col z-30 animate-in slide-in-from-bottom-10 duration-500 border border-slate-200">
+        <div className="fixed bottom-24 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[550px] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl flex flex-col z-50 animate-in slide-in-from-bottom-10 duration-500 border border-slate-200">
           <div className="p-3 border-b flex justify-between items-center bg-[#8A9A5B]/10 rounded-t-2xl">
             <div className="flex items-center gap-2">
               <span className="font-bold text-[#708090]">SParsh AI</span>
@@ -721,15 +825,50 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           </div>
 
           <div className="p-4 border-t border-slate-100 flex flex-col gap-3">
-            {/* Predefined prompts */}
+            {/* Quick actions row */}
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-              {["How to book a slot?", "Is my privacy secure?", "Feeling stressed"].map(prompt => (
+              <button
+                onClick={() => setShowChatSlotPicker(v => !v)}
+                className="whitespace-nowrap bg-[#8A9A5B]/10 hover:bg-[#8A9A5B]/20 text-[#8A9A5B] text-[11px] px-3 py-1.5 rounded-full border border-[#8A9A5B]/30 transition-colors font-bold flex items-center gap-1.5 flex-shrink-0"
+              >
+                📅 Book a Session
+              </button>
+              {["Feeling stressed", "Is my privacy secure?"].map(prompt => (
                 <button key={prompt} onClick={() => { setInputText(prompt); processMessageSend(prompt); }}
-                  className="whitespace-nowrap bg-gray-100 hover:bg-gray-200 text-slate-600 text-[11px] px-3 py-1.5 rounded-full border border-gray-200 transition-colors">
+                  className="whitespace-nowrap bg-gray-100 hover:bg-gray-200 text-slate-600 text-[11px] px-3 py-1.5 rounded-full border border-gray-200 transition-colors flex-shrink-0">
                   {prompt}
                 </button>
               ))}
             </div>
+
+            {/* In-chat slot picker */}
+            {showChatSlotPicker && (
+              <div className="bg-[#f8f6f1] rounded-xl border border-[#8A9A5B]/20 p-3 space-y-2 max-h-44 overflow-y-auto">
+                <p className="text-[11px] font-bold text-[#708090] uppercase tracking-wide">Available Slots — tap to book</p>
+                {slots.filter(s => s.status === 'open').length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-2">No open slots right now. Check back soon.</p>
+                ) : (
+                  slots.filter(s => s.status === 'open').map(slot => (
+                    <div key={slot.id} className="flex items-center justify-between bg-white rounded-lg p-2.5 border border-slate-100 shadow-sm">
+                      <div>
+                        <p className="text-xs font-bold text-[#708090]">{slot.counselorName}</p>
+                        <p className="text-[11px] text-slate-400">{slot.date} · {slot.time}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowChatSlotPicker(false);
+                          handleBookSlot(slot);
+                        }}
+                        className="text-xs bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg font-bold hover:bg-[#76854d] transition-colors"
+                      >
+                        Select
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && inputText.trim()) { handleSend(); } }} placeholder="Speak to SParsh..."
@@ -783,13 +922,17 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
         </div>
       )}
 
-      {/* ── Wellness Odyssey Overlay ──────────────────────────────────────── */}
+      {/* ── Wellness Odyssey Modal ──────────────────────────────────────── */}
       {odyssey.open && (
-        <WellnessOdyssey
-          surveyType={odyssey.type}
-          userId={userId}
-          onClose={() => setOdyssey(prev => ({ ...prev, open: false }))}
-        />
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 md:p-6 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-full max-w-md h-[80vh] max-h-[700px] bg-slate-900 shadow-2xl rounded-3xl overflow-hidden relative border border-slate-600/50">
+            <WellnessOdyssey
+              surveyType={odyssey.type}
+              userId={userId}
+              onClose={() => setOdyssey(prev => ({ ...prev, open: false }))}
+            />
+          </div>
+        </div>
       )}
 
       {/* ── Onboarding Tour ─────────────────────────────────────────────────── */}
@@ -800,6 +943,79 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             setShowOnboarding(false);
           }}
         />
+      )}
+
+      {/* ── How It Works Overlay (Feature 6) ─────────────────────────────────── */}
+      {showHowItWorks && (
+        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-[#f8f6f1] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
+            {/* Header */}
+            <div className="bg-[#8A9A5B]/10 border-b border-[#8A9A5B]/20 p-5 flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-black text-[#708090]">How It Works</h2>
+                <p className="text-xs text-slate-500 mt-1">Everything you need to know before your first session</p>
+              </div>
+              <button onClick={() => { setShowHowItWorks(false); setHowItWorksSection(null); }} className="p-2 bg-white rounded-full shadow-sm text-slate-400 hover:text-red-500 transition-all">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Accordion sections */}
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              {[
+                {
+                  icon: '📅',
+                  title: 'Step-by-step Booking Process',
+                  content: `1. Go to 'Slot Booking' tab or tap a slot card on the home screen\n2. Select an available slot showing your counselor's name, date, and time\n3. You'll be asked to complete a short digital consent form — this replaces the paper form usually signed during the first session\n4. After you submit, the slot status changes to 'Awaiting Counsellor Approval'\n5. Ms. Dimple Wagle or Ms. Jyoti Sangle will confirm or reschedule via the app\n6. You'll receive a Bell notification when your slot is confirmed\n7. You can cancel a pending request at any time before confirmation`,
+                },
+                {
+                  icon: '🤝',
+                  title: 'What to Expect in a Session',
+                  content: `Each session is approximately 45 minutes and conducted in private.\n\nFirst sessions typically cover:\n• Understanding your current situation\n• Discussing what prompted you to seek support\n• Explaining how ongoing sessions would work\n\nSubsequent sessions are guided by you — you set the pace. The counsellor will never push you to share more than you're ready to.\n\nSessions are supportive, not evaluative. Nothing discussed is reported on your academic record.`,
+                },
+                {
+                  icon: '🔒',
+                  title: 'Confidentiality & When It May Be Broken',
+                  content: `Everything you share in a session is confidential. This means:\n• No information is shared with faculty, parents, or other students\n• Session notes are kept offline by the counsellor — they are NOT stored in this app\n• The app only records: booking slots you request, consent form data, and wellness task completion\n\nConfidentiality may only be broken if:\n• There is a serious and immediate risk to your life or someone else's safety\n• Required by a court of law\n\nIn all other situations, what you share stays with your counsellor.`,
+                },
+                {
+                  icon: '🛡️',
+                  title: 'Data Privacy',
+                  content: `SPeakUp is designed privacy-first:\n• All chat data and personal messages are encrypted before being stored\n• Data stays on this device (localStorage) — it is not sent to any cloud database\n• The SParsh AI chat history is automatically cleared when you log out\n• Your P2P chats with the counsellor are stored separately and persist across sessions\n• No analytics, advertising platforms, or third parties ever access your data\n• The AI model (Qwen2.5-7B) processes text in-flight and does not retain it`,
+                },
+                {
+                  icon: '📝',
+                  title: 'What Is Recorded — and What Is Not',
+                  content: `WHAT IS STORED IN THE APP:\n✓ Your slot booking requests and confirmed slots\n✓ Your digital consent form (encrypted)\n✓ Wellness tasks assigned by your counsellor\n✓ Your GAD-7 / BDI-II assessment scores (for your own trend view only)\n✓ Your SParsh AI chat (within the current session only — deleted on logout)\n\nWHAT IS NOT STORED:\n✗ Session notes or clinical observations (these remain in the counsellor's offline diary)\n✗ Audio or video recordings\n✗ Mood data without your action\n✗ Any data shared with institutional management, faculty, or parents`,
+                },
+              ].map((section, i) => (
+                <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <button
+                    onClick={() => setHowItWorksSection(howItWorksSection === i ? null : i)}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 transition-colors"
+                  >
+                    <span className="flex items-center gap-3 font-bold text-[#708090]">
+                      <span className="text-xl">{section.icon}</span>
+                      <span className="text-sm">{section.title}</span>
+                    </span>
+                    <span className="text-[#8A9A5B] flex-shrink-0">
+                      {howItWorksSection === i ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </span>
+                  </button>
+                  {howItWorksSection === i && (
+                    <div className="px-4 pb-4 text-sm text-slate-600 leading-relaxed whitespace-pre-line border-t border-slate-50 pt-3">
+                      {section.content}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 text-center">
+              <p className="text-[10px] text-slate-400">Questions not answered here? Chat with SParsh or message your counselor directly. 💚</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

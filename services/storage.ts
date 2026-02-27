@@ -109,6 +109,14 @@ export const getChatHistory = async (userId: string): Promise<Message[]> => {
   }));
 };
 
+/** Clears only the SParsh AI chat history for a user on logout.
+ *  Does NOT touch P2P messages between students and counselors. */
+export const clearSParshHistory = (userId: string): void => {
+  const allChats = cloudGet<Record<string, Message[]>>(CLOUD_KEYS.CHATS, {});
+  delete allChats[userId];
+  cloudSet(CLOUD_KEYS.CHATS, allChats);
+};
+
 // --- P2P Messaging (Encrypted) ---
 export const sendP2PMessage = async (msg: P2PMessage) => {
   await networkDelay();
@@ -286,6 +294,13 @@ export const toggleTaskCompletion = async (studentEmail: string, taskId: string)
     t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t
   );
   allTasks[studentEmail] = updatedTasks;
+  cloudSet(CLOUD_KEYS.TASKS, allTasks);
+};
+
+export const deleteTask = async (studentEmail: string, taskId: string): Promise<void> => {
+  const allTasks = cloudGet<Record<string, WellnessTask[]>>(CLOUD_KEYS.TASKS, {});
+  const studentTasks = allTasks[studentEmail] || [];
+  allTasks[studentEmail] = studentTasks.filter(t => t.id !== taskId);
   cloudSet(CLOUD_KEYS.TASKS, allTasks);
 };
 
