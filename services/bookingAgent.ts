@@ -2,14 +2,14 @@ import { GoogleGenAI } from "@google/genai";
 import { getAvailableSlotsTool, bookSlotTool } from "../tools/bookingTools";
 import * as db from "./storage";
 
-const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY || '';
 
 let ai: GoogleGenAI | undefined;
 
 if (apiKey) {
   ai = new GoogleGenAI({ apiKey });
 } else {
-  console.error("GEMINI_API_KEY is not set in bookingAgent. AI services will be unavailable.");
+  console.error("VITE_GEMINI_API_KEY is not set in bookingAgent. AI services will be unavailable.");
 }
 
 
@@ -32,13 +32,16 @@ export const handleBookingRequest = async (userId: string, userName: string, que
         model: "gemini-2.5-flash",
         contents: [
           { role: 'user', parts: [{ text: query }] },
-          { role: 'model', parts: [{ functionResponse: {
-              name: "getAvailableSlots",
-              response: {
-                slots: openSlots,
+          {
+            role: 'model', parts: [{
+              functionResponse: {
+                name: "getAvailableSlots",
+                response: {
+                  slots: openSlots,
+                },
               },
-            },
-          }]},
+            }]
+          },
         ],
       });
       return secondResponse.text;
@@ -49,13 +52,16 @@ export const handleBookingRequest = async (userId: string, userName: string, que
         model: "gemini-2.5-flash",
         contents: [
           { role: 'user', parts: [{ text: query }] },
-          { role: 'model', parts: [{ functionResponse: {
-              name: "bookSlot",
-              response: {
-                success,
+          {
+            role: 'model', parts: [{
+              functionResponse: {
+                name: "bookSlot",
+                response: {
+                  success,
+                },
               },
-            },
-          }]},
+            }]
+          },
         ],
       });
       return secondResponse.text;

@@ -2,9 +2,20 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import LoginScreen from '../components/LoginScreen';
-import * as db from '../services/storage';
 
-vi.mock('../services/storage');
+// Mock Firebase auth service
+vi.mock('../services/authService', () => ({
+    signInWithGoogle: vi.fn(),
+    signInWithEmailPassword: vi.fn(),
+}));
+
+// Mock Firestore user service
+vi.mock('../services/userService', () => ({
+    getOrCreateUserProfile: vi.fn(),
+}));
+
+import * as authService from '../services/authService';
+import * as userService from '../services/userService';
 
 describe('LoginScreen Component', () => {
     const mockOnLogin = vi.fn();
@@ -18,29 +29,45 @@ describe('LoginScreen Component', () => {
         expect(screen.getByText('Tap to Begin')).toBeInTheDocument();
     });
 
-    it('validates email domain', async () => {
+    it('shows Google sign-in button after splash click', async () => {
         render(<LoginScreen onLogin={mockOnLogin} />);
         fireEvent.click(screen.getByText('Tap to Begin'));
-        
-        const input = screen.getByPlaceholderText('e.g. mba.rohan@spjimr.org');
-        fireEvent.change(input, { target: { value: 'bad@gmail.com' }});
-        fireEvent.click(screen.getByText('Authenticate'));
-
-        expect(await screen.findByText('Please use your official @spjimr.org email.')).toBeInTheDocument();
+        expect(screen.getByText('Sign in with Google')).toBeInTheDocument();
     });
 
-    it('calls onLogin with correct role for student', async () => {
-        (db.loginOrRegisterUser as any).mockResolvedValue({ id: '1', role: 'student', email: 's.t@spjimr.org' });
-        
+    it('shows @spjimr.org domain hint text', () => {
         render(<LoginScreen onLogin={mockOnLogin} />);
         fireEvent.click(screen.getByText('Tap to Begin'));
-        
-        const input = screen.getByPlaceholderText('e.g. mba.rohan@spjimr.org');
-        fireEvent.change(input, { target: { value: 's.t@spjimr.org' }});
-        fireEvent.click(screen.getByText('Authenticate'));
+        expect(screen.getByText(/@spjimr\.org/)).toBeInTheDocument();
+    });
+
+    it('shows error message when domain is rejected', async () => {
+        (authService.signInWithGoogle as any).mockRejectedValueOnce(
+            new Error('Access restricted. Please use your @spjimr.org email address.')
+        );
+
+        render(<LoginScreen onLogin={mockOnLogin} />);
+        fireEvent.click(screen.getByText('Tap to Begin'));
+        fireEvent.click(screen.getByText('Sign in with Google'));
 
         await waitFor(() => {
-            expect(mockOnLogin).toHaveBeenCalledWith('student', 's.t@spjimr.org', '1');
+            expect(screen.getByText(/Access restricted/)).toBeInTheDocument();
+        });
+    });
+
+    it('calls onLogin with profile on successful Google sign-in', async () => {
+        const mockFbUser = { uid: 'uid-123', email: 'test@spjimr.org', displayName: 'Test User' };
+        const mockProfile = { id: 'uid-123', role: 'student', email: 'test@spjimr.org', name: 'Test User' };
+
+        (authService.signInWithGoogle as any).mockResolvedValueOnce(mockFbUser);
+        (userService.getOrCreateUserProfile as any).mockResolvedValueOnce(mockProfile);
+
+        render(<LoginScreen onLogin={mockOnLogin} />);
+        fireEvent.click(screen.getByText('Tap to Begin'));
+        fireEvent.click(screen.getByText('Sign in with Google'));
+
+        await waitFor(() => {
+            expect(mockOnLogin).toHaveBeenCalledWith(mockProfile);
         });
     });
 });

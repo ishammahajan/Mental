@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import EnvironmentWidget from './EnvironmentWidget';
 import CounselorReportModal from './CounselorReportModal';
-import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, Map, LineChart as ChartIcon, Wand2, Activity, Send } from 'lucide-react';
+import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, Map, LineChart as ChartIcon, Wand2, Activity, Send, Edit2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import * as db from '../services/storage';
 import { deleteTask } from '../services/storage';
@@ -11,6 +11,18 @@ import { AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '..
 import ConsentForm from './ConsentForm';
 import { useNotification } from '../contexts/NotificationContext';
 import { useStorageSync } from '../hooks/useStorageSync';
+import { signOut } from '../services/authService';
+import {
+  getSlots,
+  createSlot,
+  requestSlot,
+  updateSlotStatus,
+  updateSlot,
+  deleteSlot as deleteSlotFromFirestore,
+  subscribeToSlots,
+} from '../services/slotService';
+import { collection, getDocs } from 'firebase/firestore';
+import { db as firestoreDb } from '../services/firebaseConfig';
 
 // Mock Graph Data
 const stressData = [
@@ -55,7 +67,9 @@ const downloadConsentAsPDF = async (slotId: string) => {
   if (win) { win.document.write(html); win.document.close(); }
 };
 
-const CounselorDashboard: React.FC = () => {
+interface CounselorProps { onLogout?: () => void; }
+
+const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const { addNotification, storedNotifications, unreadCount: contextUnreadCount, markAllRead, clearAll, clearOne } = useNotification();
   const [showBellDropdown, setShowBellDropdown] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
@@ -90,7 +104,7 @@ const CounselorDashboard: React.FC = () => {
   const [studentForConsent, setStudentForConsent] = useState<User | null>(null);
 
   // Posts (Wellness Wall) State
-  const [activePanel, setActivePanel] = useState<'slots' | 'posts' | 'questForge'>('slots');
+  const [activePanel, setActivePanel] = useState<'requests' | 'manageSlots' | 'posts' | 'questForge'>('requests');
   const [posts, setPosts] = useState<WellnessPost[]>([]);
   const [postTitle, setPostTitle] = useState('');
   const [postBody, setPostBody] = useState('');
@@ -105,6 +119,12 @@ const CounselorDashboard: React.FC = () => {
   const [isForging, setIsForging] = useState(false);
   const [forgedGames, setForgedGames] = useState<Record<string, GameMetadata>>({});
 
+  // Edit Slot state
+  const [editSlot, setEditSlot] = useState<AppointmentSlot | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   // Derived
   const pendingRequests = slots.filter(s => s.status === 'requested').length;
 
@@ -114,11 +134,17 @@ const CounselorDashboard: React.FC = () => {
   const selectedStudentTasks = studentTasks.find(st => st.studentEmail === selectedStudentEmail)?.tasks || [];
 
 
+  // ── Real-time Firestore slot subscription (instant cross-device updates)
+  useEffect(() => {
+    const unsub = subscribeToSlots((updatedSlots) => {
+      setSlots(updatedSlots);
+    });
+    return () => unsub();
+  }, []);
+
   // ── Real-time cross-tab sync — fires instantly when student tab changes localStorage
   useStorageSync(async (changedKey) => {
-    if (changedKey.startsWith('speakup_cloud_slots')) {
-      setSlots(await db.getSlots());
-    }
+
     if (changedKey.startsWith('speakup_cloud_posts')) {
       setPosts(await db.getAllPosts());
     }
@@ -140,8 +166,6 @@ const CounselorDashboard: React.FC = () => {
   // Poll for updates
   useEffect(() => {
     const fetchUpdates = async () => {
-      setSlots(await db.getSlots());
-
       // Fetch Inbox Data
       const convos = await db.getCounselorConversations('counselor_dimple');
       setConversations(convos);
@@ -157,8 +181,16 @@ const CounselorDashboard: React.FC = () => {
 
     const interval = setInterval(fetchUpdates, 3000);
     const init = async () => {
-      const allUsers = await db.getAllUsers();
-      setStudents(allUsers.filter(u => u.role === 'student'));
+      // Load students from Firestore (same source as their profiles)
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'users'));
+        const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        setStudents(allUsers.filter((u: any) => u.role === 'student'));
+      } catch {
+        // Fallback to localStorage if offline
+        const allUsers = await db.getAllUsers();
+        setStudents(allUsers.filter(u => u.role === 'student'));
+      }
       fetchUpdates();
       const [postsData, tasksData, gamesData] = await Promise.all([db.getAllPosts(), db.getCounselorAssignedTasks(), getForgedGames()]);
       setPosts(postsData);
@@ -219,10 +251,10 @@ const CounselorDashboard: React.FC = () => {
   // Actions
   const handleSlotAction = async (slot: AppointmentSlot, action: 'confirm' | 'reject' | 'delete') => {
     if (action === 'delete') {
-      await db.deleteSlot(slot.id);
+      await deleteSlotFromFirestore(slot.id);
       addNotification('Slot deleted successfully', 'error');
     } else if (action === 'reject') {
-      await db.updateSlotStatus(slot.id, 'open');
+      await updateSlotStatus(slot.id, 'open');
       addNotification('Slot request rejected', 'info');
     } else if (action === 'confirm') {
       const consent = await db.getConsentForSlot(slot.id);
@@ -236,10 +268,10 @@ const CounselorDashboard: React.FC = () => {
         setShowConsentModal(true);
       } else {
         // If for some reason consent is not found, just confirm.
-        await db.updateSlotStatus(slot.id, 'confirmed');
+        await updateSlotStatus(slot.id, 'confirmed');
       }
     }
-    setSlots(await db.getSlots());
+    // subscribeToSlots keeps slots in sync automatically — no manual refresh needed
   };
 
   const handleDownloadConsent = async (slotId: string) => {
@@ -258,13 +290,13 @@ const CounselorDashboard: React.FC = () => {
     };
 
     await db.saveConsent(updatedConsent);
-    await db.updateSlotStatus(selectedSlotForConsent.id, 'confirmed');
+    await updateSlotStatus(selectedSlotForConsent.id, 'confirmed');
     addNotification('Slot confirmed and consent signed', 'success');
 
     setShowConsentModal(false);
     setSelectedSlotForConsent(null);
     setConsentData(null);
-    setSlots(await db.getSlots());
+    // subscribeToSlots will refresh the slots list automatically
   };
 
 
@@ -324,17 +356,24 @@ const CounselorDashboard: React.FC = () => {
 
     const dateStr = pickerDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
-    await db.createSlot({
-      id: Date.now().toString(),
+    await createSlot({
       date: dateStr,
       time: selectedTime,
-      counselorName: "Dr. Dimple Wagle",
-      status: 'open'
+      counselorName: 'Dr. Dimple Wagle',
+      status: 'open',
     });
     addNotification('New slot published successfully', 'success');
-    setSlots(await db.getSlots());
     setShowScheduleModal(false);
     setSelectedTime(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editSlot || !editDate.trim() || !editTime.trim()) return;
+    setIsSavingEdit(true);
+    await updateSlot(editSlot.id, { date: editDate, time: editTime });
+    addNotification('Slot updated successfully', 'success');
+    setEditSlot(null);
+    setIsSavingEdit(false);
   };
 
   const handleSendMessage = async () => {
@@ -464,7 +503,7 @@ const CounselorDashboard: React.FC = () => {
               </div>
             )}
           </div>
-          <button onClick={() => window.location.reload()} title="Logout">
+          <button onClick={async () => { await signOut(); onLogout?.(); }} title="Logout">
             <LogOut className="text-slate-400 hover:text-red-500 transition-colors" size={20} />
           </button>
           <div className="flex items-center gap-2">
@@ -589,77 +628,208 @@ const CounselorDashboard: React.FC = () => {
           {/* Tab strip */}
           <div className="flex border-b border-gray-100">
             <button
-              onClick={() => setActivePanel('slots')}
-              className={`flex - 1 py - 3 text - sm font - bold flex items - center justify - center gap - 1.5 transition - colors ${activePanel === 'slots' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
-                } `}
+              onClick={() => setActivePanel('requests')}
+              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'requests' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              <Clock size={14} /> Slots
+              <Bell size={14} /> Requests
+              {slots.filter(s => s.status === 'requested').length > 0 && <span className="bg-amber-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full">{slots.filter(s => s.status === 'requested').length}</span>}
+            </button>
+            <button
+              onClick={() => setActivePanel('manageSlots')}
+              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'manageSlots' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <CalendarIcon size={14} /> Manage Slots
             </button>
             <button
               onClick={() => setActivePanel('posts')}
-              className={`flex - 1 py - 3 text - sm font - bold flex items - center justify - center gap - 1.5 transition - colors ${activePanel === 'posts' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
-                } `}
+              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'posts' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <Newspaper size={14} /> Posts
               {posts.length > 0 && <span className="bg-[#8A9A5B] text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full">{posts.length}</span>}
             </button>
             <button
               onClick={() => setActivePanel('questForge')}
-              className={`py - 3 text - sm font - bold flex items - center justify - center gap - 1.5 px - 4 transition - colors ${activePanel === 'questForge' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
-                } `}
+              className={`py-3 text-sm font-bold flex items-center justify-center gap-1.5 px-4 transition-colors ${activePanel === 'questForge' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <Wand2 size={14} /> Forge
             </button>
           </div>
 
-          {/* ── SLOTS PANEL ─────────────────────────────────────────────── */}
-          {activePanel === 'slots' && (
-            <>
-              <div className="p-3 border-b border-gray-100 bg-gray-50 flex justify-end">
-                <button onClick={() => setShowScheduleModal(true)} className="flex items-center gap-2 text-xs bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg shadow-sm hover:bg-[#728248] transition-colors">
-                  <PlusCircle size={14} /> Schedule Session
+          {/* ── REQUESTS PANEL ─────────────────────────────────────────────── */}
+          {activePanel === 'requests' && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+              {slots.filter(s => s.status === 'requested').length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                  <CheckCircle size={40} className="mb-3 text-green-300 opacity-50" />
+                  <p className="font-bold text-slate-500 mb-1">All caught up!</p>
+                  <p className="text-xs text-center px-4">You have no pending session requests to approve.</p>
+                </div>
+              ) : slots.filter(s => s.status === 'requested').map(slot => (
+                <div key={slot.id} className="bg-white rounded-xl border border-amber-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                        <Bell size={18} />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-700 text-sm">{slot.bookedByStudentName || 'Unknown Student'}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">{slot.date} at {slot.time}</p>
+                      </div>
+                    </div>
+                    <span className="bg-amber-50 text-amber-600 text-[10px] font-bold px-2 py-1 rounded border border-amber-100 uppercase tracking-widest">
+                      Needs Approval
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSlotAction(slot, 'confirm')}
+                      className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle size={14} /> Approve Session
+                    </button>
+                    <button
+                      onClick={() => handleSlotAction(slot, 'reject')}
+                      className="flex-1 bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <X size={14} /> Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── MANAGE SLOTS PANEL ─────────────────────────────────────────────── */}
+          {activePanel === 'manageSlots' && (
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Toolbar */}
+              <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between gap-2 shadow-sm z-10">
+                <div className="flex gap-2 text-[11px] font-bold">
+                  <span className="bg-gray-100 text-slate-600 px-2.5 py-1 rounded-md">{slots.filter(s => s.status === 'open').length} Open Slots</span>
+                  <span className="bg-green-100 text-green-700 px-2.5 py-1 rounded-md">{slots.filter(s => s.status === 'confirmed').length} Upcoming</span>
+                </div>
+                <button
+                  onClick={() => setShowScheduleModal(true)}
+                  className="flex items-center gap-1.5 text-xs bg-[#8A9A5B] text-white px-4 py-2 rounded-lg shadow-sm hover:bg-[#728248] transition-all hover:scale-105 font-bold"
+                >
+                  <PlusCircle size={14} /> New Slot
                 </button>
               </div>
-              <div className="p-4 space-y-3 overflow-y-auto">
-                {slots.map(slot => (
-                  <div key={slot.id} className={`flex flex - col gap - 2 p - 3 rounded - lg border ${slot.status === 'confirmed' ? 'bg-blue-50 border-blue-100' : slot.status === 'requested' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'} `}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <Clock size={16} className="text-slate-400" />
+
+              {/* Slot list */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+                {slots.filter(s => s.status !== 'requested').length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <CalendarIcon size={36} className="mb-3 opacity-30" />
+                    <p className="font-bold text-slate-500 mb-1">No slots available</p>
+                    <p className="text-xs text-center">Click "New Slot" to open your schedule.</p>
+                  </div>
+                ) : slots.filter(s => s.status !== 'requested').map(slot => (
+                  <div
+                    key={slot.id}
+                    className={`rounded-xl border p-4 transition-all hover:shadow-md bg-white ${slot.status === 'confirmed' ? 'border-green-200 border-l-4 border-l-green-500' : 'border-gray-200 border-l-4 border-l-gray-300'
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${slot.status === 'confirmed' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-500'}`}>
+                          <Clock size={16} />
+                        </div>
                         <div>
-                          <div className="text-sm font-bold text-slate-700">{slot.time}</div>
-                          <div className="text-xs text-slate-500">{slot.date}</div>
+                          <div className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                            {slot.time}
+                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-sm ${slot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                              }`}>{slot.status}</span>
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5">{slot.date}</div>
                         </div>
                       </div>
-                      <button onClick={() => handleSlotAction(slot, 'delete')}><Trash2 size={14} className="text-slate-300 hover:text-red-500" /></button>
+
+                      <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-0.5 border border-gray-100">
+                        {slot.status === 'open' && (
+                          <button
+                            onClick={() => { setEditSlot(slot); setEditDate(slot.date); setEditTime(slot.time); }}
+                            className="p-1.5 rounded-md text-slate-500 hover:text-blue-600 hover:bg-white hover:shadow-sm transition-all"
+                            title="Edit slot"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleSlotAction(slot, 'delete')}
+                          className="p-1.5 rounded-md text-slate-500 hover:text-red-600 hover:bg-white hover:shadow-sm transition-all"
+                          title="Delete slot"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
 
-                    {slot.status === 'requested' && (
-                      <div className="mt-2 p-2 bg-white rounded border border-yellow-100">
-                        <div className="text-xs text-slate-500 mb-2">Req: {slot.bookedByStudentName}</div>
-                        <div className="flex gap-2">
-                          <button onClick={() => handleSlotAction(slot, 'confirm')} className="flex-1 bg-green-500 text-white text-xs py-1 rounded hover:bg-green-600">Accept</button>
-                          <button onClick={() => handleSlotAction(slot, 'reject')} className="flex-1 bg-red-100 text-red-500 text-xs py-1 rounded hover:bg-red-200">Reject</button>
-                        </div>
-                      </div>
-                    )}
-
+                    {/* Confirmed details */}
                     {slot.status === 'confirmed' && (
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-1 text-xs text-blue-600 font-bold">
-                          <CheckCircle size={12} /> Confirmed: {slot.bookedByStudentName?.split(' ')[0]}
+                      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <img src={`https://ui-avatars.com/api/?name=${slot.bookedByStudentName}&background=random`} alt="Avatar" className="w-5 h-5 rounded-full" />
+                          <span className="text-xs font-bold text-slate-700">{slot.bookedByStudentName}</span>
                         </div>
-                        <button onClick={() => handleDownloadConsent(slot.id)} className="p-1.5 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300">
-                          <Download size={12} />
+                        <button
+                          onClick={() => handleDownloadConsent(slot.id)}
+                          className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-gray-600 hover:text-blue-600 bg-gray-100 hover:bg-blue-50 px-2.5 py-1.5 rounded-md transition-colors"
+                        >
+                          <Download size={12} /> Consent
                         </button>
                       </div>
                     )}
-
-                    {slot.status === 'open' && <div className="text-xs text-slate-400 italic">Open for booking</div>}
                   </div>
                 ))}
               </div>
-            </>
+
+              {/* Edit Slot Modal */}
+              {editSlot && (
+                <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditSlot(null)}>
+                  <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                    <h3 className="font-bold text-slate-700 text-lg mb-4 flex items-center gap-2">
+                      <Edit2 size={16} className="text-[#8A9A5B]" /> Edit Slot
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-slate-500 font-bold mb-1 uppercase tracking-wide">Date (e.g. Mon, Mar 3)</label>
+                        <input
+                          type="text"
+                          value={editDate}
+                          onChange={e => setEditDate(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl p-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#8A9A5B]/40 bg-gray-50"
+                          placeholder="Mon, Mar 3"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 font-bold mb-1 uppercase tracking-wide">Time (e.g. 5:00 PM)</label>
+                        <input
+                          type="text"
+                          value={editTime}
+                          onChange={e => setEditTime(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl p-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#8A9A5B]/40 bg-gray-50"
+                          placeholder="5:00 PM"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-6">
+                      <button
+                        onClick={() => setEditSlot(null)}
+                        className="flex-1 border border-gray-200 text-slate-600 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors"
+                      >Cancel</button>
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={isSavingEdit}
+                        className="flex-1 bg-[#8A9A5B] hover:bg-[#728248] text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-60"
+                      >
+                        {isSavingEdit ? 'Saving…' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* ── POSTS PANEL ─────────────────────────────────────────────── */}

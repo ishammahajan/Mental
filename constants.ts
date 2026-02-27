@@ -70,13 +70,6 @@ export const MOCK_STUDENTS: AnonymizedStudent[] = [
   { hashId: '9d2f...1e8', stressScore: 82, lastCheckIn: '10 mins ago', status: 'High Risk' },
 ];
 
-export const MOCK_SLOTS: AppointmentSlot[] = [
-  { id: '1', date: 'Today', time: '5:30 PM', counselorName: 'Dimple Wagle', status: 'open' },
-  { id: '2', date: 'Today', time: '6:30 PM', counselorName: 'Dimple Wagle', status: 'confirmed' },
-  { id: '3', date: 'Tomorrow', time: '5:30 PM', counselorName: 'Dimple Wagle', status: 'open' },
-  { id: '4', date: 'Wed, Oct 24', time: '4:00 PM', counselorName: 'Jyoti Sangle', status: 'open' },
-];
-
 /* 
   ================================================================================
   DELIVERABLE 3: UI VISUALIZATION PROMPTS

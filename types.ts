@@ -3,11 +3,16 @@ export type Role = 'student' | 'counselor' | 'admin';
 export interface User {
   id: string;
   casefileId?: string;
-  name: string;
+  // Structured name fields (from Firestore)
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  name: string; // display name (auto-derived: firstName + lastName)
   role: Role;
   email: string;
+  phone?: string;   // user-editable phone number
   program?: string; // e.g., "MBA Year 1"
-  mobile?: string;
+  mobile?: string;  // kept for backward compat (alias of phone)
   likes?: string[];
   dislikes?: string[];
 }

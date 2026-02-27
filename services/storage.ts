@@ -1,6 +1,5 @@
 import { User, Role, Message, AppointmentSlot, WellnessTask, WellnessLeave, JournalEntry, P2PMessage, ConsentData } from '../types';
 import { encryptData, decryptData } from '../utils/encryption';
-import { MOCK_SLOTS } from '../constants';
 
 const CLOUD_KEYS = {
   USERS: 'speakup_cloud_users',
@@ -35,6 +34,11 @@ const cloudSet = (key: string, data: any) => {
 
 
 // --- Auth ---
+// NOTE: loginOrRegisterUser and getAllUsers have been removed.
+// User authentication and profile management are now handled by Firebase Auth
+// and Firestore via services/authService.ts and services/userService.ts.
+// Use getOrCreateUserProfile() from userService.ts instead.
+
 export const getUser = async (userId: string): Promise<User | null> => {
   await networkDelay();
   const users = cloudGet<User[]>(CLOUD_KEYS.USERS, []);
@@ -58,29 +62,12 @@ const generateCasefileId = () => {
   return `${prefix}-${timestamp}-${random}`;
 };
 
+/** @deprecated — use userService.ts getUserProfile which queries Firestore */
 export const getAllUsers = async (): Promise<User[]> => {
   await networkDelay();
   return cloudGet<User[]>(CLOUD_KEYS.USERS, []);
 };
 
-export const loginOrRegisterUser = async (email: string, role: Role): Promise<User> => {
-  await networkDelay();
-  const users = cloudGet<User[]>(CLOUD_KEYS.USERS, []);
-  let user = users.find(u => u.email === email);
-  if (!user) {
-    user = {
-      id: crypto.randomUUID(),
-      casefileId: generateCasefileId(),
-      name: email.split('@')[0].replace('.', ' '),
-      email,
-      role,
-      program: role === 'student' ? email.split('.')[0] : undefined
-    };
-    users.push(user);
-    cloudSet(CLOUD_KEYS.USERS, users);
-  }
-  return user;
-};
 
 // --- AI Chat History ---
 export const saveChatMessage = async (userId: string, message: Message) => {
@@ -192,10 +179,7 @@ export const getSlots = async (): Promise<AppointmentSlot[]> => {
   // Fixed: Only initialize mock data if the KEY DOES NOT EXIST (null).
   // If key exists but is empty array [], that is valid state (all deleted).
   let slots: AppointmentSlot[] = [];
-  if (raw === null) {
-    cloudSet(CLOUD_KEYS.SLOTS, MOCK_SLOTS);
-    slots = MOCK_SLOTS;
-  } else {
+  if (raw) {
     slots = JSON.parse(raw);
   }
 

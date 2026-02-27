@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Pin, Send, XCircle, Home, CheckSquare, Calendar, Lock, Key, Activity, Newspaper, ChevronDown, ChevronUp, Bell, Heart, Upload, LogOut, Sun, CloudRain, Wind, AlertCircle, Trash2, Edit2, Plus, Sword, Map, Settings, ShieldAlert, Sparkles, ChevronRight, MessageSquare, X, Download } from 'lucide-react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import ProfileDropdown from './ProfileDropdown';
-import EditProfileModal from './EditProfileModal';
+import ProfileSettingsModal from './ProfileSettingsModal';
 import EnvironmentWidget from './EnvironmentWidget';
 import WellnessOdyssey from './WellnessOdyssey';
 import { sendMessageToSParsh } from '../services/geminiService';
@@ -18,12 +18,14 @@ import { useStorageSync } from '../hooks/useStorageSync';
 import { COUNSELORS } from '../constants';
 import { getForgedGames, GameMetadata } from '../services/ragService';
 import { detectCrisisInText } from '../services/aiService';
+import { getSlots, requestSlot as firestoreRequestSlot, updateSlotStatus as firestoreUpdateSlotStatus, subscribeToSlots } from '../services/slotService';
 
 interface Props {
   triggerCrisis: () => void;
   userEmail: string;
   userId: string;
   user: User;
+  onLogout?: () => void;
 }
 
 /** Generate a PDF for a confirmed consent */
@@ -111,10 +113,10 @@ const WallPostCard: React.FC<{ post: WellnessPost }> = ({ post }) => {
 };
 
 // ─── Main Dashboard ────────────────────────────────────────────────────────
-const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, user: initialUser }) => {
+const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, user: initialUser, onLogout }) => {
   const { addNotification, storedNotifications, unreadCount, markAllRead, clearAll, clearOne } = useNotification();
   const [user, setUser] = useState<User>(initialUser);
-  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   const { setVibe, setAvatarState } = useSParsh();
 
   const studentName = (() => {
@@ -180,9 +182,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   // Close bell dropdown on outside click
   // ── Real-time cross-tab sync (zero-latency, fires on every localStorage change in other tabs)
   useStorageSync(async (changedKey) => {
-    if (changedKey.startsWith('speakup_cloud_slots')) {
-      setSlots(await db.getSlots());
-    }
+    // Slots are now on Firestore — no localStorage sync needed for slots
     if (changedKey.startsWith('speakup_cloud_tasks')) {
       setTasks(await db.getTasks(userEmail));
     }
@@ -216,10 +216,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
     const loadData = async () => {
       setIsCloudSyncing(true);
-      const [history, tasksData, slotsData, postsData, initialUnread, forgedData] = await Promise.all([
+      const [history, tasksData, postsData, initialUnread, forgedData] = await Promise.all([
         db.getChatHistory(userId),
         db.getTasks(userEmail),
-        db.getSlots(),
         db.getAllPosts(),
         db.getUnreadP2PCount(userId),
         getForgedGames()
@@ -233,31 +232,18 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       const dismissedUntil = localStorage.getItem(`speakup_nudge_dismissed_${userId}`);
       const isDismissed = dismissedUntil && new Date(dismissedUntil) > new Date();
       if (!isDismissed) {
-        const confirmedSlots = slotsData.filter(s => s.status === 'confirmed' && s.bookedByStudentId === userId);
-        if (confirmedSlots.length > 0) {
-          // Find the most recent confirmed date
-          const pendingOrOpen = slotsData.some(s => s.status === 'requested' && s.bookedByStudentId === userId);
-          if (!pendingOrOpen) {
-            // Sort by slot id (proxy for creation date) to get latest
-            const latestConfirmed = confirmedSlots.sort((a, b) => b.id.localeCompare(a.id))[0];
-            const daysSince = Math.floor((Date.now() - parseInt(latestConfirmed.id)) / (1000 * 60 * 60 * 24));
-            if (daysSince >= 15) {
-              setFollowUpDays(daysSince);
-              setShowFollowUpNudge(true);
-            }
-          }
-        }
+        /* Since slots are now loaded asynchronously via subscribeToSlots, 
+           we handle the nudge effect separately where slots are updated */
       }
 
-      setSlots(slotsData);
       setUnreadP2P(initialUnread);
       setIsCloudSyncing(false);
     };
     loadData();
+
+    // Polling for P2P and posts (slots handled by Firestore subscribeToSlots)
     const interval = setInterval(async () => {
-      const [slotsData, postsData] = await Promise.all([db.getSlots(), db.getAllPosts()]);
-      setSlots(slotsData);
-      setPosts(postsData);
+      setPosts(await db.getAllPosts());
       if (showP2P) {
         await db.markThreadAsRead(userId, 'counselor_dimple');
         setUnreadP2P(0);
@@ -268,6 +254,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     }, 5000);
     return () => clearInterval(interval);
   }, [userId, userEmail, showP2P]);
+
+  // ── Real-time Firestore slot subscription (instant cross-device updates)
+  useEffect(() => {
+    const unsub = subscribeToSlots((updatedSlots) => {
+      setSlots(updatedSlots);
+    });
+    return () => unsub();
+  }, []);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => scrollToBottom(), [messages]);
@@ -352,7 +346,12 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   };
 
   const handleConsentSubmit = async (signature: string | File, mobile?: string) => {
-    if (mobile) await handleProfileSave({ mobile });
+    if (mobile) {
+      // Directly save phone to Firestore without re-deriving User
+      const { updateUserProfile } = await import('../services/userService');
+      await updateUserProfile(user.id, { phone: mobile });
+      setUser(prev => ({ ...prev, phone: mobile }));
+    }
     if (!selectedSlot) return;
     let signatureData = '';
     if (signature instanceof File) {
@@ -370,26 +369,29 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     };
     await db.saveConsent(consent as ConsentData);
     setIsCloudSyncing(true);
-    const success = await db.requestSlot(selectedSlot.id, userId, studentName);
+    const success = await firestoreRequestSlot(selectedSlot.id, userId, studentName);
     setIsCloudSyncing(false);
-    if (success) { setSlots(await db.getSlots()); addNotification('Slot requested! Awaiting counselor approval.', 'success'); }
-    else addNotification('Failed to book: This slot was just taken by someone else.', 'error');
-    setShowConsentModal(false); setSelectedSlot(null);
+    if (success) {
+      // subscribeToSlots will update slots list automatically on both student and counselor
+      addNotification('Slot requested! Awaiting counselor approval.', 'success');
+    } else {
+      addNotification('Failed to book: This slot was just taken by someone else.', 'error');
+    }
+    setShowConsentModal(false);
+    setSelectedSlot(null);
   };
 
   const handleCancelSlot = async (slotId: string) => {
     addNotification('Slot booking cancelled', 'info');
     setIsCloudSyncing(true);
-    await db.updateSlotStatus(slotId, 'open');
-    setSlots(await db.getSlots());
+    await firestoreUpdateSlotStatus(slotId, 'open');
+    // subscribeToSlots will update the slot list automatically
     setIsCloudSyncing(false);
   };
 
-  const handleProfileSave = async (updatedDetails: Partial<User>) => {
-    await updateUser(user.id, updatedDetails);
-    const updatedUser = await getUser(user.id);
-    if (updatedUser) setUser(updatedUser);
-    setShowEditProfileModal(false);
+  const handleProfileSave = (updatedUser: User) => {
+    setUser(updatedUser);
+    setShowProfileSettings(false);
   };
 
   const handleP2PSend = async () => {
@@ -503,7 +505,16 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             )}
           </div>
 
-          <ProfileDropdown user={user} onEditProfile={() => setShowEditProfileModal(true)} onLogout={() => { clearSParshHistory(userId); window.location.reload(); }} />
+          <ProfileDropdown
+            user={user}
+            onEditProfile={() => setShowProfileSettings(true)}
+            onLogout={async () => {
+              const { signOut } = await import('../services/authService');
+              clearSParshHistory(userId);
+              await signOut();
+              onLogout?.();
+            }}
+          />
         </div>
       </div>
 
@@ -830,33 +841,94 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             <ConsentForm role="student" studentName={studentName} program="PGDM"
               onClose={() => setShowConsentModal(false)} onSubmit={handleConsentSubmit} user={user} />
           )}
-          {showEditProfileModal && (
-            <EditProfileModal user={user} onClose={() => setShowEditProfileModal(false)} onSave={handleProfileSave} />
+          {showProfileSettings && (
+            <ProfileSettingsModal user={user} onClose={() => setShowProfileSettings(false)} onSave={handleProfileSave} />
           )}
 
           {/* ── BOOKING TAB ───────────────────────────────────────────────── */}
           {activeTab === 'booking' && (
             <div className="animate-in slide-in-from-right-10 duration-500 space-y-4">
-              <h3 className="text-xl font-bold text-[#708090] mb-6">Book a Sanctuary Slot</h3>
-              {slots.map(slot => {
+              <h3 className="text-xl font-bold text-[#708090] mb-2">Book a Sanctuary Slot</h3>
+              <p className="text-xs text-slate-400 mb-5">Slots are published by your counselor. Tap "Book" to request — they'll confirm shortly.</p>
+
+              {slots.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400 neu-flat rounded-2xl">
+                  <Calendar size={36} className="mb-3 opacity-30" />
+                  <p className="font-bold text-slate-500 mb-1">No slots published yet</p>
+                  <p className="text-xs text-center">Your counselor hasn't added any sessions. Check back soon.</p>
+                </div>
+              ) : slots.map(slot => {
                 const isMyBooking = slot.bookedByStudentId === userId;
-                let btnText = 'Select', btnClass = 'bg-[#E6DDD0] text-[#8A9A5B] border border-[#8A9A5B]', statusText = '';
-                if (slot.status === 'confirmed') { btnText = isMyBooking ? 'Confirmed' : 'Taken'; btnClass = isMyBooking ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-400'; statusText = isMyBooking ? 'Slot Confirmed' : ''; }
-                else if (slot.status === 'requested') { btnText = isMyBooking ? 'Cancel Req' : 'Pending'; btnClass = isMyBooking ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-400'; statusText = isMyBooking ? 'Waiting Approval' : ''; }
+                const isOpen = slot.status === 'open';
+                const isRequested = slot.status === 'requested';
+                const isConfirmed = slot.status === 'confirmed';
+
                 return (
-                  <div key={slot.id} className="neu-flat p-4 rounded-2xl flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-[#708090]">{slot.counselorName}</div>
-                      <div className="text-sm text-slate-400">{slot.date} • {slot.time}</div>
-                      {statusText && <div className="text-[10px] uppercase font-bold text-slate-500 mt-1">{statusText}</div>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isMyBooking && slot.status === 'confirmed' && (
-                        <button onClick={() => downloadConsentAsPDF(slot.id)} className="p-2 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300"><Download size={16} /></button>
-                      )}
-                      <button disabled={slot.status !== 'open' && !isMyBooking}
-                        onClick={() => { if (slot.status === 'open') handleBookSlot(slot); if (isMyBooking && slot.status === 'requested') handleCancelSlot(slot.id); }}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all active:scale-95 ${btnClass}`}>{btnText}</button>
+                  <div key={slot.id} className={`rounded-2xl p-4 border transition-all ${isMyBooking && isConfirmed ? 'bg-green-50 border-green-200' :
+                    isMyBooking && isRequested ? 'bg-amber-50 border-amber-200' :
+                      isOpen ? 'neu-flat border-transparent' :
+                        'bg-gray-50 border-gray-200 opacity-60'
+                    }`}>
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <div className="font-bold text-[#708090]">{slot.counselorName}</div>
+                        <div className="text-sm text-slate-400 mt-0.5">{slot.date} · {slot.time}</div>
+                        {/* Status badge */}
+                        <div className="mt-2">
+                          {isMyBooking && isConfirmed && (
+                            <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                              ✓ Confirmed — see you then!
+                            </span>
+                          )}
+                          {isMyBooking && isRequested && (
+                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                              ⏳ Awaiting counselor approval
+                            </span>
+                          )}
+                          {!isMyBooking && !isOpen && (
+                            <span className="text-[11px] text-slate-400 italic">Booked by another student</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        {/* Download consent — confirmed only */}
+                        {isMyBooking && isConfirmed && (
+                          <button
+                            onClick={() => downloadConsentAsPDF(slot.id)}
+                            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition-colors"
+                          >
+                            <Download size={13} /> Consent
+                          </button>
+                        )}
+                        {/* Book / Cancel / Disabled */}
+                        {isOpen && (
+                          <button
+                            onClick={() => handleBookSlot(slot)}
+                            className="px-4 py-2 rounded-xl text-sm font-bold bg-[#8A9A5B] text-white hover:bg-[#76854d] transition-all active:scale-95 shadow-sm"
+                          >
+                            Book
+                          </button>
+                        )}
+                        {isMyBooking && isRequested && (
+                          <button
+                            onClick={() => handleCancelSlot(slot.id)}
+                            className="px-4 py-2 rounded-xl text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all active:scale-95"
+                          >
+                            Cancel Request
+                          </button>
+                        )}
+                        {isMyBooking && isConfirmed && (
+                          <span className="text-[10px] text-slate-400 italic text-right max-w-[120px]">
+                            Message counselor to cancel
+                          </span>
+                        )}
+                        {!isOpen && !isMyBooking && (
+                          <button disabled className="px-4 py-2 rounded-xl text-sm font-bold bg-gray-200 text-gray-400 cursor-not-allowed">
+                            Taken
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
