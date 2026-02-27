@@ -5,6 +5,12 @@ import { saveSurveyResult, getSurveyResults, SurveyResult } from '../services/st
 import * as db from '../services/storage';
 import { useNotification } from '../contexts/NotificationContext';
 
+import AlchemistOfShadows from './games/AlchemistOfShadows';
+import WeaversLoom from './games/WeaversLoom';
+import LogicPuzzle from './games/LogicPuzzle';
+import CustomExplorer from './games/CustomExplorer';
+import { getForgedGames, GameMetadata } from '../services/ragService';
+
 // ─── Survey Data ─────────────────────────────────────────────────────────────
 
 const GAD7_QUESTIONS = [
@@ -144,15 +150,17 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
     const [shuffledOptions, setShuffledOptions] = useState(FREQUENCY_OPTIONS);
     const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
     const [historicalScores, setHistoricalScores] = useState<SurveyResult[]>([]);
-    const [sharingSent, setSharingSent] = useState(false);
-
-    useEffect(() => {
-        setShuffledOptions([...FREQUENCY_OPTIONS].sort(() => Math.random() - 0.5));
-    }, [currentIdx]);
     const [relic, setRelic] = useState('');
     const [isLoadingRelic, setIsLoadingRelic] = useState(false);
     const [xp, setXp] = useState(0);
     const [animating, setAnimating] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [sharingSent, setSharingSent] = useState(false);
+
+    const [forgedGames, setForgedGames] = useState<Record<string, GameMetadata>>({});
+    const [activeGameId, setActiveGameId] = useState<string | null>(null);
+
+    // Contexts & Storage
     const [surveyResult, setSurveyResult] = useState<SurveyResult | null>(null);
 
     const totalScore = answers.reduce((s, a) => s + a, 0);
@@ -160,7 +168,20 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
     const currentQ = questions[currentIdx];
     const isLastQ = currentIdx === questions.length - 1;
     const bgColor = atmosphereColors(healthPct);
-    const progress = ((currentIdx + (answers.length > currentIdx ? 1 : 0)) / questions.length) * 100;
+    // const progress = ((currentIdx + (answers.length > currentIdx ? 1 : 0)) / questions.length) * 100; // This was a calculated variable, now it's a state.
+
+    useEffect(() => {
+        setShuffledOptions([...FREQUENCY_OPTIONS].sort(() => Math.random() - 0.5));
+    }, [currentIdx]);
+
+    useEffect(() => {
+        const loadHistory = async () => {
+            const allResults = await getSurveyResults(userId);
+            setHistoricalScores(allResults.filter(r => r.surveyType === surveyType));
+        };
+        loadHistory();
+        getForgedGames().then(setForgedGames).catch(console.error);
+    }, [surveyType, userId]);
 
     const handleAnswer = async (value: number) => {
         if (animating) return;
@@ -333,6 +354,33 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
                             <p className="text-emerald-400">Odyssey Complete · {xp} XP Earned</p>
                         </div>
 
+                        {/* Dynamic Forged Quest content */}
+                        {surveyType !== 'GAD7' && surveyType !== 'BDI' && forgedGames[surveyType] && (
+                            <div>
+                                <h2 className="text-xl font-bold mb-4">{forgedGames[surveyType].title}</h2>
+                                <div className="bg-white/5 rounded-xl border border-white/10 p-4 mb-4">
+                                    <p className="text-indigo-200">This is a custom interactive quest forged by your counselor. It uses the <strong>{forgedGames[surveyType].paradigm}</strong> paradigm.</p>
+                                </div>
+
+                                {forgedGames[surveyType].paradigm === 'Resource Gathering' && (
+                                    <AlchemistOfShadows gameId={surveyType} onClose={() => setActiveGameId(null)} onComplete={() => setActiveGameId(null)} />
+                                )}
+                                {forgedGames[surveyType].paradigm === 'Story Weaving' && (
+                                    <WeaversLoom gameId={surveyType} onClose={() => setActiveGameId(null)} onComplete={() => setActiveGameId(null)} />
+                                )}
+                                {forgedGames[surveyType].paradigm === 'Logic Puzzle' && (
+                                    <LogicPuzzle gameId={surveyType} onClose={() => setActiveGameId(null)} onComplete={() => setActiveGameId(null)} />
+                                )}
+
+                                {/* Fallback if paradigm is unknown */}
+                                {!['Resource Gathering', 'Story Weaving', 'Logic Puzzle'].includes(forgedGames[surveyType].paradigm) && (
+                                    <div className="text-center p-6 bg-red-900/40 rounded-xl border border-red-500/50">
+                                        <p className="text-red-200">Error: Unknown Game Paradigm ({forgedGames[surveyType].paradigm})</p>
+                                        <button onClick={onClose} className="mt-4 px-4 py-2 bg-red-600 rounded-lg font-bold">Return</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {/* Score Card */}
                         <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
                             <div className="flex justify-between items-center mb-4">
@@ -352,29 +400,38 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
                             </div>
                         </div>
 
-                        {/* Radar Chart */}
+                        {/* RAG Games Hub (Replaces Charts) */}
                         <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
-                            <h3 className="text-white font-bold mb-4 text-center">📐 Wellness Domains</h3>
-                            <ResponsiveContainer width="100%" height={280}>
-                                <RadarChart data={soulData}>
-                                    <PolarGrid stroke="rgba(255,255,255,0.2)" />
-                                    <PolarAngleAxis dataKey="domain" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                                    <Radar name="Wellness" dataKey="wellness" stroke="#10b981" fill="#10b981" fillOpacity={0.3} strokeWidth={2} />
-                                </RadarChart>
-                            </ResponsiveContainer>
-                        </div>
+                            <h3 className="text-white font-bold mb-4 flex items-center gap-2 justify-center">
+                                <Sparkles size={18} className="text-purple-400" /> Interactive Wellness Quests
+                            </h3>
+                            <p className="text-slate-300 text-xs text-center mb-6">
+                                Choose a quest crafted by your counselor to further explore your thoughts.
+                            </p>
 
-                        {/* Bar Chart */}
-                        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-white/20">
-                            <h3 className="text-white font-bold mb-4 text-center">📊 Wellness by Domain (%)</h3>
-                            <ResponsiveContainer width="100%" height={200}>
-                                <BarChart data={soulData}>
-                                    <XAxis dataKey="domain" tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                                    <YAxis domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                                    <Tooltip contentStyle={{ background: '#1e293b', border: 'none', borderRadius: 8, color: '#fff' }} />
-                                    <Bar dataKey="wellness" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
+                            {Object.keys(forgedGames).length === 0 ? (
+                                <div className="text-center p-4 bg-white/5 border border-dashed border-white/20 rounded-xl text-slate-400 text-sm">
+                                    No custom quests forged yet.
+                                </div>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {(Object.entries(forgedGames) as [string, GameMetadata][]).map(([id, game]) => (
+                                        <button
+                                            key={id}
+                                            onClick={() => setActiveGameId(id)}
+                                            className="w-full bg-slate-800/60 hover:bg-slate-700/80 border border-slate-600/50 rounded-xl p-4 text-left transition-all flex justify-between items-center group cursor-pointer"
+                                        >
+                                            <div>
+                                                <div className="font-bold text-white text-sm mb-1">{game.title}</div>
+                                                <div className="text-[10px] uppercase font-bold text-emerald-400 tracking-widest">{game.paradigm}</div>
+                                            </div>
+                                            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 group-hover:text-white transition-colors">
+                                                <ChevronRight size={16} />
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {/* Disclaimer */}
@@ -460,6 +517,44 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
                         </div>
                     </div>
                 </div>
+
+                {/* Render Active Game */}
+                {activeGameId && forgedGames[activeGameId] && (
+                    <div className="absolute inset-0 z-50">
+                        {forgedGames[activeGameId].paradigm === 'Resource Gathering' && (
+                            <AlchemistOfShadows
+                                gameId={activeGameId}
+                                gameTitle={forgedGames[activeGameId].title}
+                                onClose={() => setActiveGameId(null)}
+                                onComplete={() => setActiveGameId(null)}
+                            />
+                        )}
+                        {forgedGames[activeGameId].paradigm === 'Story Weaving' && (
+                            <WeaversLoom
+                                gameId={activeGameId}
+                                gameTitle={forgedGames[activeGameId].title}
+                                onClose={() => setActiveGameId(null)}
+                                onComplete={() => setActiveGameId(null)}
+                            />
+                        )}
+                        {forgedGames[activeGameId].paradigm === 'Logic Puzzle' && (
+                            <LogicPuzzle
+                                gameId={activeGameId}
+                                gameTitle={forgedGames[activeGameId].title}
+                                onClose={() => setActiveGameId(null)}
+                                onComplete={() => setActiveGameId(null)}
+                            />
+                        )}
+                        {forgedGames[activeGameId].paradigm === 'Custom Explorer' && (
+                            <CustomExplorer
+                                gameId={activeGameId}
+                                gameTitle={forgedGames[activeGameId].title}
+                                onClose={() => setActiveGameId(null)}
+                                onComplete={() => setActiveGameId(null)}
+                            />
+                        )}
+                    </div>
+                )}
             </div>
         );
     }

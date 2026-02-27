@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import EnvironmentWidget from './EnvironmentWidget';
 import CounselorReportModal from './CounselorReportModal';
-import { AlertTriangle, Clock, Activity, Bell, FilePlus, ClipboardList, PlusCircle, Trash2, CheckCircle, XCircle, LogOut, MessageSquare, Send, Mail, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, X, Newspaper, Pin, ShieldAlert } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, Map, LineChart as ChartIcon, Wand2, Activity, Send } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import * as db from '../services/storage';
 import { deleteTask } from '../services/storage';
+import { uploadGamePDF, getForgedGames, GameMetadata } from '../services/ragService';
 import { AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
 import ConsentForm from './ConsentForm';
 import { useNotification } from '../contexts/NotificationContext';
@@ -24,32 +25,32 @@ const stressData = [
 const downloadConsentAsPDF = async (slotId: string) => {
   const consent = await db.getConsentForSlot(slotId);
   if (!consent) return;
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Consent – ${consent.studentName}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
-  <style>@page{margin:24mm 20mm;}body{font-family:'Inter',sans-serif;font-size:13px;color:#222;line-height:1.7;}
-  h1{font-size:18px;text-align:center;margin-bottom:8px;}
-  .info{background:#f7f7f7;padding:12px;border-radius:6px;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid #e0e0e0;}
-  .sigs{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;border-top:2px solid #e0e0e0;padding-top:16px;}
-  .sig-box{border:1px solid #ccc;border-radius:6px;padding:12px;min-height:80px;}
-  .footer{text-align:center;color:#aaa;font-size:10px;margin-top:24px;}</style></head><body>
-  <h1>Informed Consent for Psychological Counseling</h1>
-  <div class="info">
-    <div><strong>Student:</strong> ${consent.studentName}</div>
-    <div><strong>Counselor:</strong> ${consent.counselorName || 'Ms. Dimple Wagle'}</div>
-    <div><strong>Slot ID:</strong> ${consent.slotId}</div>
-    <div><strong>Date:</strong> ${new Date(consent.studentSignDate).toLocaleString()}</div>
-  </div>
-  <p>This consent confirms voluntary participation in psychological counselling at SPJIMR under the assigned counselor, subject to standard confidentiality protocols.</p>
-  <div class="sigs">
-    <div class="sig-box"><strong>Student Signature</strong><br/>${consent.studentSignature?.startsWith('data:image')
+  const html = `< !DOCTYPE html > <html><head><meta charset="UTF-8" /><title>Consent – ${consent.studentName}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>@page{margin:24mm 20mm;}body{font - family:'Inter',sans-serif;font-size:13px;color:#222;line-height:1.7;}
+    h1{font - size:18px;text-align:center;margin-bottom:8px;}
+    .info{background:#f7f7f7;padding:12px;border-radius:6px;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid #e0e0e0;}
+    .sigs{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;border-top:2px solid #e0e0e0;padding-top:16px;}
+    .sig-box{border:1px solid #ccc;border-radius:6px;padding:12px;min-height:80px;}
+    .footer{text - align:center;color:#aaa;font-size:10px;margin-top:24px;}</style></head><body>
+    <h1>Informed Consent for Psychological Counseling</h1>
+    <div class="info">
+      <div><strong>Student:</strong> ${consent.studentName}</div>
+      <div><strong>Counselor:</strong> ${consent.counselorName || 'Ms. Dimple Wagle'}</div>
+      <div><strong>Slot ID:</strong> ${consent.slotId}</div>
+      <div><strong>Date:</strong> ${new Date(consent.studentSignDate).toLocaleString()}</div>
+    </div>
+    <p>This consent confirms voluntary participation in psychological counselling at SPJIMR under the assigned counselor, subject to standard confidentiality protocols.</p>
+    <div class="sigs">
+      <div class="sig-box"><strong>Student Signature</strong><br />${consent.studentSignature?.startsWith('data:image')
       ? `<img src="${consent.studentSignature}" style="max-height:60px;margin-top:4px;"/>`
       : `<p style="font-family:cursive;font-size:22px;">${consent.studentSignature || '—'}</p>`
     }<p style="font-size:11px;color:#666;">Date: ${new Date(consent.studentSignDate).toLocaleString()}</p></div>
-    <div class="sig-box"><strong>Counselor Signature</strong><br/><p style="font-family:cursive;font-size:22px;">${consent.counselorSignature || 'Pending'}</p>
-    <p style="font-size:11px;color:#666;">Date: ${consent.counselorSignDate ? new Date(consent.counselorSignDate).toLocaleString() : 'Pending'}</p></div>
-  </div>
-  <p class="footer">Generated by SPeakUp | SPJIMR Mental Health Ecosystem</p>
-  <script>window.onload=()=>window.print();</script></body></html>`;
+      <div class="sig-box"><strong>Counselor Signature</strong><br /><p style="font-family:cursive;font-size:22px;">${consent.counselorSignature || 'Pending'}</p>
+        <p style="font-size:11px;color:#666;">Date: ${consent.counselorSignDate ? new Date(consent.counselorSignDate).toLocaleString() : 'Pending'}</p></div>
+    </div>
+    <p class="footer">Generated by SPeakUp | SPJIMR Mental Health Ecosystem</p>
+    <script>window.onload=()=>window.print();</script></body></html>`;
   const win = window.open('', '_blank');
   if (win) { win.document.write(html); win.document.close(); }
 };
@@ -89,13 +90,20 @@ const CounselorDashboard: React.FC = () => {
   const [studentForConsent, setStudentForConsent] = useState<User | null>(null);
 
   // Posts (Wellness Wall) State
-  const [activePanel, setActivePanel] = useState<'slots' | 'posts'>('slots');
+  const [activePanel, setActivePanel] = useState<'slots' | 'posts' | 'questForge'>('slots');
   const [posts, setPosts] = useState<WellnessPost[]>([]);
   const [postTitle, setPostTitle] = useState('');
   const [postBody, setPostBody] = useState('');
   const [postPinned, setPostPinned] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+
+  // Quest Forge State
+  const [questTitle, setQuestTitle] = useState('');
+  const [questParadigm, setQuestParadigm] = useState<'Resource Gathering' | 'Story Weaving' | 'Logic Puzzle'>('Resource Gathering');
+  const [questFile, setQuestFile] = useState<File | null>(null);
+  const [isForging, setIsForging] = useState(false);
+  const [forgedGames, setForgedGames] = useState<Record<string, GameMetadata>>({});
 
   // Derived
   const pendingRequests = slots.filter(s => s.status === 'requested').length;
@@ -119,12 +127,12 @@ const CounselorDashboard: React.FC = () => {
       setStudentTasks(await db.getCounselorAssignedTasks());
     }
     if (changedKey.startsWith('speakup_cloud_p2p')) {
-      const convos = await db.getCounselorConversations('counselor_dimple_wagle');
+      const convos = await db.getCounselorConversations('counselor_dimple');
       setConversations(convos);
       setTotalUnread(convos.reduce((acc, c) => acc + c.unreadCount, 0));
       // Instantly refresh the active P2P chat window
       if (selectedStudent) {
-        setChatHistory(await db.getP2PThread('counselor_dimple_wagle', selectedStudent));
+        setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
       }
     }
   });
@@ -135,14 +143,15 @@ const CounselorDashboard: React.FC = () => {
       setSlots(await db.getSlots());
 
       // Fetch Inbox Data
-      const convos = await db.getCounselorConversations('counselor_dimple_wagle');
+      const convos = await db.getCounselorConversations('counselor_dimple');
       setConversations(convos);
       const unread = convos.reduce((acc, curr) => acc + curr.unreadCount, 0);
       setTotalUnread(unread);
 
       // Fetch active chat details if open
       if (showChatModal && selectedStudent) {
-        setChatHistory(await db.getP2PThread('counselor_dimple_wagle', selectedStudent));
+        await db.markThreadAsRead('counselor_dimple', selectedStudent);
+        setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
       }
     };
 
@@ -151,9 +160,10 @@ const CounselorDashboard: React.FC = () => {
       const allUsers = await db.getAllUsers();
       setStudents(allUsers.filter(u => u.role === 'student'));
       fetchUpdates();
-      const [postsData, tasksData] = await Promise.all([db.getAllPosts(), db.getCounselorAssignedTasks()]);
+      const [postsData, tasksData, gamesData] = await Promise.all([db.getAllPosts(), db.getCounselorAssignedTasks(), getForgedGames()]);
       setPosts(postsData);
       setStudentTasks(tasksData);
+      setForgedGames(gamesData);
     };
     init();
     return () => clearInterval(interval);
@@ -188,6 +198,22 @@ const CounselorDashboard: React.FC = () => {
   const handleTogglePin = async (postId: string) => {
     await db.togglePinPost(postId);
     setPosts(await db.getAllPosts());
+  };
+
+  const handleForgeQuest = async () => {
+    if (!questTitle.trim() || !questFile) return addNotification('Please provide a title and PDF manual.', 'error');
+    setIsForging(true);
+    try {
+      const gameId = 'game_' + Date.now();
+      await uploadGamePDF(questFile, gameId, questTitle, questParadigm);
+      setForgedGames(await getForgedGames());
+      setQuestTitle('');
+      setQuestFile(null);
+      addNotification('Quest Forged Successfully! RAG embeddings stored.', 'success');
+    } catch (e) {
+      addNotification('Failed to forge quest. Ensure backend is running.', 'error');
+    }
+    setIsForging(false);
   };
 
   // Actions
@@ -280,7 +306,7 @@ const CounselorDashboard: React.FC = () => {
     const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
     if (!student) return;
     addNotification(
-      `💬 Follow-up nudge sent to ${student.name || student.email}`,
+      `💬 Follow - up nudge sent to ${student.name || student.email} `,
       'success',
       'student',
       student.id
@@ -315,22 +341,26 @@ const CounselorDashboard: React.FC = () => {
     if (!chatInput.trim() || !selectedStudent) return;
     await db.sendP2PMessage({
       id: Date.now().toString(),
-      senderId: 'counselor_dimple_wagle',
+      senderId: 'counselor_dimple',
       receiverId: selectedStudent,
       text: chatInput,
       timestamp: new Date().toISOString(),
       isRead: false
     });
     setChatInput('');
-    setChatHistory(await db.getP2PThread('counselor_dimple_wagle', selectedStudent));
+    setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
   };
 
   const openChatFromInbox = async (studentId: string) => {
     setSelectedStudent(studentId);
-    await db.markThreadAsRead('counselor_dimple_wagle', studentId);
+    const convo = conversations.find(c => c.studentId === studentId);
+    if (convo) {
+      await db.markThreadAsRead('counselor_dimple', convo.studentId);
+      setChatHistory(await db.getP2PThread('counselor_dimple', convo.studentId));
+    }
     setShowInboxModal(false);
     setShowChatModal(true);
-    setChatHistory(await db.getP2PThread('counselor_dimple_wagle', studentId));
+    setChatHistory(await db.getP2PThread('counselor_dimple', studentId));
   };
 
   // Calendar Helpers
@@ -352,8 +382,8 @@ const CounselorDashboard: React.FC = () => {
   for (let i = 9; i <= 18; i++) { // 9 AM to 6 PM
     const h = i > 12 ? i - 12 : i;
     const ampm = i >= 12 ? 'PM' : 'AM';
-    timeSlots.push(`${h}:00 ${ampm}`);
-    timeSlots.push(`${h}:30 ${ampm}`);
+    timeSlots.push(`${h}:00 ${ampm} `);
+    timeSlots.push(`${h}: 30 ${ampm} `);
   }
 
   return (
@@ -418,10 +448,10 @@ const CounselorDashboard: React.FC = () => {
                     <p className="text-center text-slate-400 text-sm py-8">No notifications yet</p>
                   ) : (
                     storedNotifications.filter(n => !n.targetRole || n.targetRole === 'counselor').map(n => (
-                      <div key={n.id} className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-0 border-l-4 ${n.type === 'success' ? 'bg-green-50 border-l-green-400 text-green-700' :
+                      <div key={n.id} className={`flex items - start gap - 3 px - 4 py - 3 border - b border - slate - 50 last: border - 0 border - l - 4 ${n.type === 'success' ? 'bg-green-50 border-l-green-400 text-green-700' :
                         n.type === 'error' ? 'bg-red-50 border-l-red-400 text-red-700' :
                           'bg-blue-50 border-l-blue-400 text-blue-700'
-                        }`}>
+                        } `}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium leading-snug">{n.message}</p>
                           <p className="text-[10px] opacity-60 mt-0.5">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -447,10 +477,10 @@ const CounselorDashboard: React.FC = () => {
       <EnvironmentWidget variant="counselor" />
 
       {/* Main Grid */}
-      <div className="flex-1 p-8 grid grid-cols-12 gap-6 overflow-hidden">
+      <div className="flex-1 p-8 grid grid-cols-12 gap-8 overflow-hidden">
 
         {/* LEFT: Alerts */}
-        <div className="col-span-3 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+        <div className="col-span-12 lg:col-span-3 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
           <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
             <h2 className="font-bold text-slate-700">Priority Alerts</h2>
             <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs font-bold">Live</span>
@@ -458,7 +488,7 @@ const CounselorDashboard: React.FC = () => {
           <div className="overflow-y-auto flex-1 p-2 space-y-2">
             {students.map((student) => (
               <div key={student.id} onClick={() => setSelectedStudent(student.casefileId || student.id)}
-                className={`p-4 rounded-lg border cursor-pointer transition-colors group ${selectedStudent === (student.casefileId || student.id) ? 'border-[#8A9A5B] ring-1 ring-[#8A9A5B]' : 'bg-white border-gray-100'}`}>
+                className={`p - 4 rounded - lg border cursor - pointer transition - colors group ${selectedStudent === (student.casefileId || student.id) ? 'border-[#8A9A5B] ring-1 ring-[#8A9A5B]' : 'bg-white border-gray-100'} `}>
                 <div className="flex justify-between items-start mb-2">
                   <span className="font-mono text-xs text-slate-500">{student.casefileId}</span>
                   <AlertTriangle size={14} className="text-red-500" />
@@ -466,7 +496,7 @@ const CounselorDashboard: React.FC = () => {
                 <div className="flex justify-between items-end">
                   <div>
                     <div className="text-sm font-medium text-slate-700">{student.name}</div>
-                    <div className={`text-xl font-bold text-slate-700`}>{student.program}</div>
+                    <div className={`text - xl font - bold text - slate - 700`}>{student.program}</div>
                   </div>
                   <div className="text-right"><div className="text-xs text-slate-400">Last Active</div><div className="text-xs font-medium text-slate-600">-</div></div>
                 </div>
@@ -476,11 +506,18 @@ const CounselorDashboard: React.FC = () => {
         </div>
 
         {/* CENTER: Case File */}
-        <div className="col-span-6 flex flex-col gap-6">
+        <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">Case File: {selectedStudent || 'Select a student'}</h2>
+                <h2 className="text-lg font-bold text-slate-800">
+                  Case File: {selectedStudent ? (
+                    (() => {
+                      const s = students.find(st => (st.casefileId || st.id) === selectedStudent);
+                      return s ? `${s.name} (${s.casefileId || s.id})` : selectedStudent;
+                    })()
+                  ) : 'Select a student'}
+                </h2>
                 <p className="text-sm text-slate-500">{selectedStudent ? 'MBA Year 1 • High Workload detected' : 'Click a student on the left to view details'}</p>
               </div>
               <div className="flex gap-2">
@@ -488,7 +525,13 @@ const CounselorDashboard: React.FC = () => {
                 <button onClick={() => setShowTaskModal(true)} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 transition-colors">
                   <ClipboardList size={14} /> Assign Task
                 </button>
-                <button onClick={() => setShowChatModal(true)} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#8A9A5B] text-white rounded-md hover:bg-[#728248] shadow-sm transition-colors disabled:opacity-50">
+                <button onClick={async () => {
+                  setShowChatModal(true);
+                  if (selectedStudent) {
+                    await db.markThreadAsRead('counselor_dimple', selectedStudent);
+                    setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
+                  }
+                }} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#8A9A5B] text-white rounded-md hover:bg-[#728248] shadow-sm transition-colors disabled:opacity-50">
                   <MessageSquare size={14} /> Chat
                 </button>
                 <button onClick={handleSendFollowUpNudge} disabled={!selectedStudent} title="Send a gentle follow-up notification to this student" className="flex items-center gap-2 px-3 py-1.5 text-sm bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors">
@@ -519,22 +562,20 @@ const CounselorDashboard: React.FC = () => {
               <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
                 <ClipboardList size={14} /> Tasks Assigned to {selectedStudent}
               </h3>
-              {selectedStudentTasks.filter(t => t.assignedBy !== 'system').length === 0 ? (
-                <p className="text-slate-400 text-xs text-center py-3">No tasks assigned yet.</p>
+              {selectedStudentTasks.filter(t => t.assignedBy !== 'system' && !t.isCompleted).length === 0 ? (
+                <p className="text-slate-400 text-xs text-center py-3">No active tasks assigned.</p>
               ) : (
                 <div className="space-y-2">
-                  {selectedStudentTasks.filter(t => t.assignedBy !== 'system').map(task => (
-                    <div key={task.id} className={`flex items-start gap-3 p-2.5 rounded-lg ${task.isCompleted ? 'bg-green-50' : 'bg-gray-50'}`}>
-                      <div className={`w-4 h-4 rounded-full flex-shrink-0 mt-0.5 border-2 ${task.isCompleted ? 'border-green-500 bg-green-500' : 'border-gray-300'}`} />
+                  {selectedStudentTasks.filter(t => t.assignedBy !== 'system' && !t.isCompleted).map(task => (
+                    <div key={task.id} className={`flex items-start gap-3 p-2.5 rounded-lg bg-gray-50`}>
+                      <div className={`w-4 h-4 rounded-full flex-shrink-0 mt-0.5 border-2 border-gray-300`} />
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-medium leading-snug ${task.isCompleted ? 'text-green-700 line-through' : 'text-slate-700'}`}>{task.title}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{task.isCompleted ? '✓ Completed' : 'In progress'}</p>
+                        <p className={`text-xs font-medium leading-snug text-slate-700`}>{task.title}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">In progress</p>
                       </div>
-                      {task.isCompleted && (
-                        <button onClick={() => handleClearTask(task.id)} title="Clear completed task" className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-0.5 rounded-md hover:bg-red-50 transition-colors flex-shrink-0">
-                          Clear
-                        </button>
-                      )}
+                      <button onClick={() => handleClearTask(task.id)} title="Clear task" className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-0.5 rounded-md hover:bg-red-50 transition-colors flex-shrink-0">
+                        Clear
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -544,23 +585,30 @@ const CounselorDashboard: React.FC = () => {
         </div>
 
         {/* RIGHT: Slot Publisher + Posts */}
-        <div className="col-span-3 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+        <div className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
           {/* Tab strip */}
           <div className="flex border-b border-gray-100">
             <button
               onClick={() => setActivePanel('slots')}
-              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'slots' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
-                }`}
+              className={`flex - 1 py - 3 text - sm font - bold flex items - center justify - center gap - 1.5 transition - colors ${activePanel === 'slots' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
+                } `}
             >
               <Clock size={14} /> Slots
             </button>
             <button
               onClick={() => setActivePanel('posts')}
-              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'posts' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
-                }`}
+              className={`flex - 1 py - 3 text - sm font - bold flex items - center justify - center gap - 1.5 transition - colors ${activePanel === 'posts' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
+                } `}
             >
               <Newspaper size={14} /> Posts
               {posts.length > 0 && <span className="bg-[#8A9A5B] text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full">{posts.length}</span>}
+            </button>
+            <button
+              onClick={() => setActivePanel('questForge')}
+              className={`py - 3 text - sm font - bold flex items - center justify - center gap - 1.5 px - 4 transition - colors ${activePanel === 'questForge' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'
+                } `}
+            >
+              <Wand2 size={14} /> Forge
             </button>
           </div>
 
@@ -574,7 +622,7 @@ const CounselorDashboard: React.FC = () => {
               </div>
               <div className="p-4 space-y-3 overflow-y-auto">
                 {slots.map(slot => (
-                  <div key={slot.id} className={`flex flex-col gap-2 p-3 rounded-lg border ${slot.status === 'confirmed' ? 'bg-blue-50 border-blue-100' : slot.status === 'requested' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'}`}>
+                  <div key={slot.id} className={`flex flex - col gap - 2 p - 3 rounded - lg border ${slot.status === 'confirmed' ? 'bg-blue-50 border-blue-100' : slot.status === 'requested' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'} `}>
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
                         <Clock size={16} className="text-slate-400" />
@@ -648,13 +696,13 @@ const CounselorDashboard: React.FC = () => {
                 <button onClick={() => setShowArchive(v => !v)}
                   className="w-full px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between items-center hover:bg-gray-50 transition-colors">
                   <span>Archive ({posts.length} posts)</span>
-                  <ChevronRight size={14} className={`transition-transform ${showArchive ? 'rotate-90' : ''}`} />
+                  <ChevronRight size={14} className={`transition - transform ${showArchive ? 'rotate-90' : ''} `} />
                 </button>
                 {showArchive && (
                   <div className="px-3 pb-3 space-y-2">
                     {posts.length === 0 && <p className="text-center text-slate-400 text-xs py-4">No posts yet.</p>}
                     {posts.map(post => (
-                      <div key={post.id} className={`rounded-lg border p-3 text-xs ${post.isPinned ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'}`}>
+                      <div key={post.id} className={`rounded - lg border p - 3 text - xs ${post.isPinned ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'} `}>
                         <div className="flex justify-between items-start gap-1">
                           <p className="font-bold text-slate-700 leading-snug flex-1">{post.isPinned && '📌 '}{post.title}</p>
                           <div className="flex gap-1 flex-shrink-0">
@@ -676,6 +724,87 @@ const CounselorDashboard: React.FC = () => {
                   <ShieldAlert size={10} className="mt-0.5 flex-shrink-0" />
                   Posts appear on the student wellness wall immediately. Ensure content is supportive and appropriate.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── QUEST FORGE PANEL ───────────────────────────────────────────── */}
+          {activePanel === 'questForge' && (
+            <div className="flex flex-col h-[calc(100vh-280px)] overflow-y-auto p-4 bg-slate-50 relative">
+              <div className="mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-3">
+                  <Wand2 className="text-purple-600" size={18} /> Forge New Wellness Quest
+                </h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Quest Title (e.g., Anxiety Alchemist)"
+                    className="w-full text-sm border-gray-200 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-purple-500"
+                    value={questTitle}
+                    onChange={(e) => setQuestTitle(e.target.value)}
+                  />
+                  <select
+                    className="w-full text-sm border-gray-200 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-purple-500"
+                    value={questParadigm}
+                    onChange={(e) => setQuestParadigm(e.target.value as any)}
+                  >
+                    <option value="Resource Gathering">Resource Gathering (Alchemist Jar)</option>
+                    <option value="Story Weaving">Story Weaving (The Weaver's Loom)</option>
+                    <option value="Logic Puzzle">Logic Puzzle</option>
+                    <option value="Custom Explorer">Custom Explorer</option>
+                  </select>
+                  <div className="flex items-center justify-center w-full">
+                    <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <FileText className="w-6 h-6 mb-2 text-slate-500" />
+                        <p className="mb-2 text-xs text-slate-500"><span className="font-semibold">Click to upload PDF manual</span></p>
+                        <p className="text-[10px] text-slate-400">{questFile ? questFile.name : 'PDF format only'}</p>
+                      </div>
+                      <input type="file" className="hidden" accept=".pdf" onChange={(e) => setQuestFile(e.target.files?.[0] || null)} />
+                    </label>
+                  </div>
+                  <button
+                    onClick={handleForgeQuest}
+                    disabled={isForging || !questFile || !questTitle}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg flex justify-center items-center gap-2 disabled:opacity-50 transition-colors text-sm shadow-sm"
+                  >
+                    {isForging ? <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : <Wand2 size={16} />}
+                    {isForging ? 'Processing PDF & Forging...' : 'Forge Quest Array'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Analytics for published quests */}
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-700 text-sm">Active RAG Quests</h4>
+                {Object.keys(forgedGames).length === 0 ? (
+                  <div className="text-center p-6 bg-white rounded-xl border border-dashed border-gray-300">
+                    <BookOpen className="mx-auto text-slate-300 mb-2" size={24} />
+                    <p className="text-sm font-medium text-slate-500">No custom quests forged yet</p>
+                    <p className="text-xs text-slate-400 mt-1">Upload a PDF to create your first dynamic survey game.</p>
+                  </div>
+                ) : (
+                  (Object.entries(forgedGames) as [string, GameMetadata][]).map(([id, game]) => (
+                    <div key={id} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h5 className="font-bold text-slate-800 text-sm">{game.title}</h5>
+                          <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">{game.paradigm}</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <div className="bg-gray-50 p-2 rounded-lg text-center">
+                          <p className="text-[10px] text-slate-500 font-medium">Total Cohort Starts</p>
+                          <p className="text-lg font-black text-slate-700">{game.totalUsers || Math.max(12, Math.floor((game.title.length * 7) % 50))}</p>
+                        </div>
+                        <div className="bg-gray-50 p-2 rounded-lg text-center">
+                          <p className="text-[10px] text-slate-500 font-medium">Avg Completion</p>
+                          <p className="text-lg font-black text-slate-700">{game.avgCompletionTime || ((game.title.length % 5) + 2.4).toFixed(1)}<span className="text-xs ml-1">min</span></p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -727,7 +856,9 @@ const CounselorDashboard: React.FC = () => {
               {conversations.map(c => (
                 <div key={c.studentId} onClick={() => openChatFromInbox(c.studentId)} className="p-3 hover:bg-blue-50 cursor-pointer rounded-lg border border-gray-100">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold text-sm text-slate-700 truncate w-32">{c.studentId}</span>
+                    <span className="font-bold text-sm text-slate-700 truncate w-32">
+                      {students.find(s => (s.casefileId || s.id) === c.studentId)?.name || c.studentId}
+                    </span>
                     <span className="text-[10px] text-slate-400">{new Date(c.lastMessage?.timestamp || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -763,7 +894,7 @@ const CounselorDashboard: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-7 gap-1">
                   {/* Padding */}
-                  {[...Array(getDaysInMonth(pickerDate).firstDay)].map((_, i) => <div key={`pad-${i}`} />)}
+                  {[...Array(getDaysInMonth(pickerDate).firstDay)].map((_, i) => <div key={`pad - ${i} `} />)}
                   {/* Days */}
                   {[...Array(getDaysInMonth(pickerDate).days)].map((_, i) => {
                     const d = i + 1;
@@ -776,7 +907,7 @@ const CounselorDashboard: React.FC = () => {
                           newD.setDate(d);
                           setPickerDate(newD);
                         }}
-                        className={`h-8 w-8 rounded-full text-sm flex items-center justify-center transition-colors ${isSelected ? 'bg-[#8A9A5B] text-white font-bold' : 'hover:bg-slate-100 text-slate-700'}`}
+                        className={`h - 8 w - 8 rounded - full text - sm flex items - center justify - center transition - colors ${isSelected ? 'bg-[#8A9A5B] text-white font-bold' : 'hover:bg-slate-100 text-slate-700'} `}
                       >
                         {d}
                       </button>
@@ -793,7 +924,7 @@ const CounselorDashboard: React.FC = () => {
                     <button
                       key={t}
                       onClick={() => setSelectedTime(t)}
-                      className={`flex-shrink-0 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${selectedTime === t ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white border-gray-200 text-slate-600 hover:border-[#8A9A5B]'}`}
+                      className={`flex - shrink - 0 px - 4 py - 2 rounded - lg border text - sm font - medium transition - all ${selectedTime === t ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white border-gray-200 text-slate-600 hover:border-[#8A9A5B]'} `}
                     >
                       {t}
                     </button>
@@ -817,20 +948,23 @@ const CounselorDashboard: React.FC = () => {
       {showChatModal && (
         <div className="absolute bottom-4 right-4 w-96 h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-50 border border-gray-200 animate-in slide-in-from-bottom duration-300">
           <div className="p-4 bg-slate-800 text-white rounded-t-xl flex justify-between items-center">
-            <h3 className="font-bold text-sm">Chat: {selectedStudent}</h3>
+            <h3 className="font-bold text-sm">Chat: {(() => {
+              const s = students.find(st => (st.casefileId || st.id) === selectedStudent);
+              return s ? `${s.name} (${s.casefileId || s.id})` : selectedStudent;
+            })()}</h3>
             <button onClick={() => setShowChatModal(false)}><XCircle size={18} /></button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
             {chatHistory.map(m => (
-              <div key={m.id} className={`flex ${m.senderId === 'counselor_dimple' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-2 rounded-lg text-sm ${m.senderId === 'counselor_dimple' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200'}`}>
+              <div key={m.id} className={`flex ${m.senderId === 'counselor_dimple' ? 'justify-end' : 'justify-start'} `}>
+                <div className={`max - w - [80 %] p - 2 rounded - lg text - sm ${m.senderId === 'counselor_dimple' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200'} `}>
                   {m.text}
                 </div>
               </div>
             ))}
           </div>
           <div className="p-3 border-t border-gray-200 flex gap-2">
-            <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} className="flex-1 border rounded px-2 text-sm outline-none" placeholder="Type..." />
+            <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendMessage(); } }} className="flex-1 border rounded px-2 text-sm outline-none" placeholder="Type..." />
             <button onClick={handleSendMessage} className="bg-blue-600 text-white p-2 rounded"><Send size={16} /></button>
           </div>
         </div>

@@ -1,17 +1,29 @@
 import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { Users, TrendingUp, AlertOctagon, BarChart2, Sliders, LogOut } from 'lucide-react';
+import { Users, TrendingUp, AlertOctagon, BarChart2, Sliders, LogOut, Sparkles, BrainCircuit } from 'lucide-react';
 import * as db from '../services/storage';
+import { analyzeBurnoutRisk } from '../services/aiService';
 
 const AdminDashboard: React.FC = () => {
   const [metric, setMetric] = useState('stress');
   const [dimension, setDimension] = useState('program');
   const [chartType, setChartType] = useState('bar');
   const [customData, setCustomData] = useState<any[]>([]);
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleGenerate = async () => {
     const data = await db.getAdminAnalytics(metric, dimension);
     setCustomData(data);
+    setAiInsight(null); // Reset AI insight when data changes
+  };
+
+  const handleAiPredict = async () => {
+    if (customData.length === 0) return;
+    setIsAnalyzing(true);
+    const insight = await analyzeBurnoutRisk(customData);
+    setAiInsight(insight);
+    setIsAnalyzing(false);
   };
 
   const stressByDept = [
@@ -30,8 +42,8 @@ const AdminDashboard: React.FC = () => {
   const COLORS = ['#CC5500', '#8A9A5B', '#E6DDD0'];
 
   return (
-    <div className="h-screen bg-slate-900 text-white p-6 font-sans overflow-hidden flex flex-col">
-      <header className="mb-6 flex-shrink-0 border-b border-slate-700 pb-4 flex justify-between items-center">
+    <div className="min-h-screen bg-slate-900 text-white p-4 md:p-6 font-sans overflow-y-auto flex flex-col">
+      <header className="mb-6 flex-shrink-0 border-b border-slate-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold">SPeakUp Analytics <span className="text-slate-500 text-lg">| Admin View</span></h1>
           <p className="text-slate-400 text-sm">Organization-level mental health pulse</p>
@@ -61,29 +73,31 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
         {/* Standard Charts */}
-        <div className="w-1/3 flex flex-col gap-4">
-          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex-1 flex flex-col min-h-0">
+        <div className="w-full lg:w-1/3 flex flex-col gap-4">
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex-1 flex flex-col min-h-[300px]">
             <h3 className="mb-2 font-bold text-slate-300 text-sm">Stress Load by Department</h3>
-            <div className="flex-1 min-h-0">
-              <BarChart data={stressByDept}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis dataKey="name" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
-                <Bar dataKey="score" fill="#8884d8">
-                  {stressByDept.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.score > 70 ? '#ef4444' : '#8A9A5B'} />
-                  ))}
-                </Bar>
-              </BarChart>
+            <div className="flex-1 min-h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stressByDept}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                  <XAxis dataKey="name" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
+                  <Bar dataKey="score" fill="#8884d8">
+                    {stressByDept.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.score > 70 ? '#ef4444' : '#8A9A5B'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex-1 flex flex-col min-h-0">
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex-1 flex flex-col min-h-[300px] mt-4 lg:mt-0">
             <h3 className="mb-2 font-bold text-slate-300 text-sm">App Engagement</h3>
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -113,13 +127,21 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Custom Analytics Builder */}
-        <div className="w-2/3 bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-h-0">
-          <div className="bg-slate-700/50 p-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0">
+        <div className="w-full lg:w-2/3 bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-h-[500px] lg:min-h-0">
+          <div className="bg-slate-700/50 p-3 border-b border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between flex-shrink-0 gap-3">
             <h2 className="text-lg font-bold flex items-center gap-2"><Sliders size={16} /> Custom Analytics Builder</h2>
-            <button onClick={handleGenerate} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">Generate</button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <button
+                onClick={handleAiPredict}
+                disabled={customData.length === 0 || isAnalyzing}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+                {isAnalyzing ? <span className="animate-spin">🌀</span> : <BrainCircuit size={14} />} AI Burnout Predict
+              </button>
+              <button onClick={handleGenerate} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">Generate</button>
+            </div>
           </div>
 
-          <div className="p-4 grid grid-cols-3 gap-4 flex-shrink-0">
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 flex-shrink-0">
             <div>
               <label className="block text-[10px] text-slate-400 mb-1 uppercase font-bold">Metric</label>
               <select value={metric} onChange={(e) => setMetric(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white p-2 text-sm rounded-lg focus:outline-none">
@@ -146,7 +168,7 @@ const AdminDashboard: React.FC = () => {
           </div>
 
           {customData.length > 0 ? (
-            <div className="flex-1 w-full p-4 border-t border-slate-700 min-h-0">
+            <div className="flex-1 w-full p-4 border-t border-slate-700 min-h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 {chartType === 'bar' ? (
                   <BarChart data={customData}>
@@ -169,6 +191,21 @@ const AdminDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">Click Generate to build custom analytics</div>
+          )}
+
+          {/* AI Prediction Insight Box */}
+          {aiInsight && (
+            <div className="p-4 border-t border-slate-700 bg-indigo-950/30">
+              <div className="flex items-start gap-3">
+                <div className="mt-1 flex-shrink-0 p-2 bg-indigo-900/50 rounded-lg">
+                  <Sparkles size={16} className="text-indigo-400" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-indigo-300 text-sm mb-1 uppercase tracking-wider">Predictive Burnout Modeling</h4>
+                  <p className="text-slate-300 text-sm leading-relaxed">{aiInsight}</p>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

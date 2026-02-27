@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, ShieldCheck, Heart, Map, ArrowRight, CheckCircle, ShieldAlert, Zap } from 'lucide-react';
 
 interface Props {
-    onComplete: () => void;
+    onComplete: (playGame?: boolean) => void;
 }
 
 const OnboardingTour: React.FC<Props> = ({ onComplete }) => {
@@ -14,6 +14,7 @@ const OnboardingTour: React.FC<Props> = ({ onComplete }) => {
     const [step2Locked, setStep2Locked] = useState(false);
     const [step3Text, setStep3Text] = useState('');
     const [step4Collected, setStep4Collected] = useState(false);
+    const [step5Accepted, setStep5Accepted] = useState<boolean | null>(null);
 
     useEffect(() => {
         setInteractionComplete(false);
@@ -21,14 +22,15 @@ const OnboardingTour: React.FC<Props> = ({ onComplete }) => {
         if (step === 1 && step2Locked) setInteractionComplete(true);
         if (step === 2 && step3Text.toLowerCase() === 'hi') setInteractionComplete(true);
         if (step === 3 && step4Collected) setInteractionComplete(true);
-    }, [step, step1Ignited, step2Locked, step3Text, step4Collected]);
+        if (step === 4 && step5Accepted !== null) setInteractionComplete(true);
+    }, [step, step1Ignited, step2Locked, step3Text, step4Collected, step5Accepted]);
 
     const handleNext = () => {
-        if (!interactionComplete && step < 3) return; // Must interact to continue unless bypassing
-        if (step < 3) {
+        if (!interactionComplete && step < 4) return; // Must interact to continue unless bypassing
+        if (step < 4) {
             setStep(step + 1);
         } else {
-            onComplete();
+            onComplete(step5Accepted === true);
         }
     };
 
@@ -104,6 +106,28 @@ const OnboardingTour: React.FC<Props> = ({ onComplete }) => {
                 </button>
             ),
             hint: step4Collected ? "Odyssey ready! You're all set." : "Tap the spinning shard to collect."
+        },
+        {
+            title: "Interactive Quests 🎲",
+            description: "Your counselor has crafted gamified wellness quests specially for you. Would you like to try one now?",
+            color: "from-purple-900 to-slate-900",
+            interactive: (
+                <div className="flex gap-4 items-center justify-center mt-4">
+                    <button
+                        onClick={() => { setStep5Accepted(false); setInteractionComplete(true); }}
+                        className={`px-5 py-3 rounded-xl transition-all font-bold ${step5Accepted === false ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                    >
+                        Maybe Later
+                    </button>
+                    <button
+                        onClick={() => { setStep5Accepted(true); setInteractionComplete(true); }}
+                        className={`px-5 py-3 rounded-xl border border-purple-500 transition-all font-bold ${step5Accepted === true ? 'bg-purple-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.6)]' : 'bg-purple-900/40 text-purple-300 hover:bg-purple-800/80'}`}
+                    >
+                        Play a Quest
+                    </button>
+                </div>
+            ),
+            hint: step5Accepted !== null ? "Choice recorded! Click Let's Begin." : "Select an option above."
         }
     ];
 

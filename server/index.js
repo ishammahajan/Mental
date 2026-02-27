@@ -19,6 +19,10 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// RAG Game Builder endpoints
+const ragRouter = require('./ragRouter');
+app.use('/api/rag', ragRouter);
+
 // HuggingFace Configuration
 const HF_TOKEN = process.env.HF_TOKEN;
 

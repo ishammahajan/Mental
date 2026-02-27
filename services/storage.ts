@@ -166,11 +166,11 @@ export const getCounselorConversations = async (counselorId: string) => {
   });
 };
 
-export const markThreadAsRead = async (counselorId: string, studentId: string) => {
+export const markThreadAsRead = async (receiverId: string, senderId: string) => {
   const allMsgs = cloudGet<P2PMessage[]>(CLOUD_KEYS.P2P_MSGS, []);
   let changed = false;
   const updated = allMsgs.map(m => {
-    if (m.receiverId === counselorId && m.senderId === studentId && !m.isRead) {
+    if (m.receiverId === receiverId && m.senderId === senderId && !m.isRead) {
       changed = true;
       return { ...m, isRead: true };
     }
@@ -178,6 +178,11 @@ export const markThreadAsRead = async (counselorId: string, studentId: string) =
   });
   if (changed) cloudSet(CLOUD_KEYS.P2P_MSGS, updated);
 }
+
+export const getUnreadP2PCount = async (userId: string): Promise<number> => {
+  const allMsgs = cloudGet<P2PMessage[]>(CLOUD_KEYS.P2P_MSGS, []);
+  return allMsgs.filter(m => m.receiverId === userId && !m.isRead).length;
+};
 
 // --- Appointments & Approval Workflow ---
 // Slot Booking

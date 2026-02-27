@@ -16,6 +16,8 @@ import OnboardingTour from './OnboardingTour';
 import { getUser, updateUser, clearSParshHistory } from '../services/storage';
 import { useStorageSync } from '../hooks/useStorageSync';
 import { COUNSELORS } from '../constants';
+import { getForgedGames, GameMetadata } from '../services/ragService';
+import { detectCrisisInText } from '../services/aiService';
 
 interface Props {
   triggerCrisis: () => void;
@@ -141,12 +143,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   const [showP2P, setShowP2P] = useState(false);
   const [p2pMessages, setP2PMessages] = useState<P2PMessage[]>([]);
   const [p2pInput, setP2PInput] = useState('');
+  const [unreadP2P, setUnreadP2P] = useState(0);
 
   // Wall feed posts
   const [posts, setPosts] = useState<WellnessPost[]>([]);
 
   // Wellness Odyssey overlay
-  const [odyssey, setOdyssey] = useState<{ open: boolean; type: 'GAD7' | 'BDI' }>({ open: false, type: 'GAD7' });
+  const [odyssey, setOdyssey] = useState<{ open: boolean; type: 'GAD7' | 'BDI' | string }>({ open: false, type: 'GAD7' });
+  const [forgedGames, setForgedGames] = useState<Record<string, GameMetadata>>({});
 
   // Two-counselor selector
   const [selectedCounselor, setSelectedCounselor] = useState<typeof COUNSELORS[0] | null>(null);
@@ -185,8 +189,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     if (changedKey.startsWith('speakup_cloud_posts')) {
       setPosts(await db.getAllPosts());
     }
-    if (changedKey.startsWith('speakup_cloud_p2p') && showP2P && selectedCounselor) {
-      setP2PMessages(await db.getP2PThread(userId, selectedCounselor.id));
+    if (changedKey.startsWith('speakup_cloud_p2p')) {
+      if (showP2P && selectedCounselor) {
+        setP2PMessages(await db.getP2PThread(userId, selectedCounselor.id));
+        await db.markThreadAsRead(userId, selectedCounselor.id);
+        setUnreadP2P(0);
+      } else {
+        setUnreadP2P(await db.getUnreadP2PCount(userId));
+      }
     }
   });
 
@@ -206,15 +216,18 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
     const loadData = async () => {
       setIsCloudSyncing(true);
-      const [history, tasksData, slotsData, postsData] = await Promise.all([
+      const [history, tasksData, slotsData, postsData, initialUnread, forgedData] = await Promise.all([
         db.getChatHistory(userId),
         db.getTasks(userEmail),
         db.getSlots(),
         db.getAllPosts(),
+        db.getUnreadP2PCount(userId),
+        getForgedGames()
       ]);
       setMessages(history);
       setTasks(tasksData);
       setPosts(postsData);
+      setForgedGames(forgedData || {});
 
       // Follow-up nudge: only for students who have a prior confirmed booking
       const dismissedUntil = localStorage.getItem(`speakup_nudge_dismissed_${userId}`);
@@ -237,6 +250,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       }
 
       setSlots(slotsData);
+      setUnreadP2P(initialUnread);
       setIsCloudSyncing(false);
     };
     loadData();
@@ -244,7 +258,13 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       const [slotsData, postsData] = await Promise.all([db.getSlots(), db.getAllPosts()]);
       setSlots(slotsData);
       setPosts(postsData);
-      if (showP2P) setP2PMessages(await db.getP2PThread(userId, 'counselor_dimple'));
+      if (showP2P) {
+        await db.markThreadAsRead(userId, 'counselor_dimple');
+        setUnreadP2P(0);
+        setP2PMessages(await db.getP2PThread(userId, 'counselor_dimple'));
+      } else {
+        setUnreadP2P(await db.getUnreadP2PCount(userId));
+      }
     }, 5000);
     return () => clearInterval(interval);
   }, [userId, userEmail, showP2P]);
@@ -374,9 +394,31 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
   const handleP2PSend = async () => {
     if (!p2pInput.trim()) return;
+
+    // 1. Save message to DB
     await db.sendP2PMessage({ id: Date.now().toString(), senderId: userId, receiverId: 'counselor_dimple', text: p2pInput, timestamp: new Date().toISOString(), isRead: false });
+
+    // 2. Clear input & Optimistically update UI
+    const sentText = p2pInput;
     setP2PInput('');
     setP2PMessages(await db.getP2PThread(userId, 'counselor_dimple'));
+
+    // 3. Background AI Crisis Detection
+    detectCrisisInText(sentText).then(async (result) => {
+      if (result.isCrisis) {
+        console.warn('CRISIS DETECTED BY AI:', result.reason);
+        triggerCrisis();
+        // Optionally send an automated system message to the counselor alerting them immediately
+        await db.sendP2PMessage({
+          id: Date.now().toString() + '_sys',
+          senderId: 'system',
+          receiverId: 'counselor_dimple',
+          text: `🚨 URGENT AI ALERT: Potential crisis detected for ${studentName}. Reason: ${result.reason}`,
+          timestamp: new Date().toISOString(),
+          isRead: false
+        });
+      }
+    });
   };
 
   const openSlots = slots.filter(s => s.status === 'open');
@@ -410,9 +452,22 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowP2P(true)} className="neu-icon-btn p-3 rounded-full text-[#708090]">
-            <MessageSquare size={20} />
-          </button>
+          <div className="relative">
+            <button onClick={async () => {
+              setShowP2P(true);
+              if (selectedCounselor) {
+                await db.markThreadAsRead(userId, selectedCounselor.id);
+                setUnreadP2P(0);
+              }
+            }} className="neu-icon-btn p-3 rounded-full text-[#708090]">
+              <MessageSquare size={20} />
+            </button>
+            {unreadP2P > 0 && (
+              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-pulse border-2 border-[#DCD4C4]">
+                {unreadP2P > 9 ? '9+' : unreadP2P}
+              </span>
+            )}
+          </div>
 
           {/* Bell Dropdown */}
           <div className="relative" ref={bellRef}>
@@ -497,7 +552,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             </div>
             <div className="p-4 bg-white/50">
               <div className="flex gap-2">
-                <input type="text" value={p2pInput} onChange={e => setP2PInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleP2PSend()} placeholder="Type a message..." className="flex-1 p-2 rounded-lg border border-gray-300 outline-none" />
+                <input type="text" value={p2pInput} onChange={e => setP2PInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleP2PSend(); } }} placeholder="Type a message..." className="flex-1 p-2 rounded-lg border border-gray-300 outline-none" />
                 <button onClick={handleP2PSend} className="bg-[#8A9A5B] text-white p-2 rounded-lg"><Send size={18} /></button>
               </div>
             </div>
@@ -566,9 +621,16 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="bg-white p-2 text-center rounded-xl min-w-[60px] shadow-sm">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">{activeSlot.date.split(',')[0].slice(0, 3)}</p>
-                          <p className="font-black text-[#708090] text-lg">{activeSlot.date.split(' ')[1] || activeSlot.date.split(',')[0].slice(-2).replace(/[^0-9]/g, '')}</p>
+                        <div className="bg-white p-2 text-center rounded-xl min-w-[60px] shadow-sm flex flex-col items-center justify-center">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase leading-none mb-1">
+                            {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { weekday: 'short' }) : activeSlot.date.split(',')[0].slice(0, 3)}
+                          </p>
+                          <p className="font-black text-[#708090] text-lg leading-none">
+                            {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).getDate() : (activeSlot.date.split(' ')[1] || activeSlot.date.split(',')[0].slice(-2).replace(/[^0-9]/g, ''))}
+                          </p>
+                          <p className="text-[10px] text-[#8A9A5B] font-bold uppercase leading-none mt-1">
+                            {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { month: 'short' }) : activeSlot.date.split(' ').pop()}
+                          </p>
                         </div>
                         <div>
                           <p className="font-bold text-[#708090] text-sm">{activeSlot.time}</p>
@@ -600,6 +662,17 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 }
                 return null;
               })()}
+
+              {/* RAG Gamification Launchpad */}
+              <div className="flex-shrink-0 bg-indigo-900/10 p-4 rounded-3xl border border-indigo-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div>
+                  <h3 className="font-bold text-indigo-900 flex items-center gap-2"><Sparkles size={16} /> Interactive Quests</h3>
+                  <p className="text-xs text-indigo-800/70">Play gamified cognitive exercises crafted by your counselor.</p>
+                </div>
+                <button onClick={() => setOdyssey({ open: true, type: 'GAD7' })} className="bg-indigo-600 font-bold text-white px-5 py-2 rounded-xl text-sm shadow-md hover:bg-indigo-500 transition-colors whitespace-nowrap">
+                  Open Quest Hub
+                </button>
+              </div>
 
               {/* Middle Row: Wellness Wall (Ribbon View) */}
               <div className="flex-shrink-0">
@@ -697,6 +770,37 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   </div>
                 </div>
               </div>
+
+              {/* ── Custom Forged Quests ── */}
+              {Object.keys(forgedGames).length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3 mt-6">
+                    <Sparkles size={16} className="text-indigo-600" />
+                    <h3 className="font-bold text-slate-600 text-base">Interactive Quests</h3>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">Custom Forged</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {Object.entries(forgedGames).map(([gameId, gameValue]) => {
+                      const game = gameValue as GameMetadata;
+                      return (
+                        <div key={gameId} className="bg-gradient-to-br from-slate-800 to-indigo-950 rounded-2xl p-5 border border-indigo-700/40 shadow-lg">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-2xl mb-1">✨</div>
+                              <h4 className="font-black text-white text-base">{game.title}</h4>
+                              <p className="text-indigo-300 text-xs uppercase tracking-wide font-medium mt-1">{game.paradigm}</p>
+                            </div>
+                            <button onClick={() => setOdyssey({ open: true, type: gameId as any })}
+                              className="bg-indigo-500 hover:bg-indigo-400 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 flex items-center gap-1.5 mt-2">
+                              <Map size={14} /> Begin
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* ── Counsellor-Assigned Tasks ── */}
               <div>
@@ -938,9 +1042,12 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       {/* ── Onboarding Tour ─────────────────────────────────────────────────── */}
       {showOnboarding && (
         <OnboardingTour
-          onComplete={() => {
+          onComplete={(playGame) => {
             localStorage.setItem(`speakup_onboarding_${userId}`, 'true');
             setShowOnboarding(false);
+            if (playGame) {
+              setOdyssey({ open: true, type: 'GAD7' });
+            }
           }}
         />
       )}

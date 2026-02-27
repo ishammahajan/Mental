@@ -11,8 +11,15 @@ import { NotificationProvider } from './contexts/NotificationContext';
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
-    const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isCrisisMode, setIsCrisisMode] = useState(false);
+
+  // Clear P2P chat history purely for testing requested by user
+  React.useEffect(() => {
+    localStorage.removeItem('speakup_cloud_p2p');
+    localStorage.removeItem('speakup_cloud_chats');
+    console.log('Cleared P2P and AI chat history from local storage for testing.');
+  }, []);
 
   // Check for API Key at the top level
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -20,46 +27,46 @@ export default function App() {
     return <NoApiKeyFallback />;
   }
 
-    const handleLogin = (loggedInUser: User) => {
+  const handleLogin = (loggedInUser: User) => {
     setCurrentRole(loggedInUser.role);
     setUser(loggedInUser);
   };
 
-        if (!user) {
+  if (!user) {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (
     <NotificationProvider>
       <SParshProvider>
-      <div className="min-h-screen bg-[#E6DDD0] relative font-sans">
-        
-        {/* Crisis Overlay (Global) */}
-        {isCrisisMode && (
-          <CrisisOverlay onDismiss={() => setIsCrisisMode(false)} />
-        )}
+        <div className="min-h-screen bg-[#E6DDD0] relative font-sans">
 
-        {/* Main Routing */}
-        <main className="w-full">
-          <div className="w-full">
-                    {user && user.role === 'student' && (
-            <StudentDashboard 
-              triggerCrisis={() => setIsCrisisMode(true)} 
-              userEmail={user.email} 
-              userId={user.id} 
-              user={user}
-            />
+          {/* Crisis Overlay (Global) */}
+          {isCrisisMode && (
+            <CrisisOverlay onDismiss={() => setIsCrisisMode(false)} />
           )}
-          {currentRole === 'counselor' && (
-            <CounselorDashboard />
-          )}
-          {currentRole === 'admin' && (
-            <AdminDashboard />
-          )}
-          </div>
-        </main>
-      </div>
-    </SParshProvider>
+
+          {/* Main Routing */}
+          <main className="w-full">
+            <div className="w-full">
+              {user && user.role === 'student' && (
+                <StudentDashboard
+                  triggerCrisis={() => setIsCrisisMode(true)}
+                  userEmail={user.email}
+                  userId={user.id}
+                  user={user}
+                />
+              )}
+              {currentRole === 'counselor' && (
+                <CounselorDashboard />
+              )}
+              {currentRole === 'admin' && (
+                <AdminDashboard />
+              )}
+            </div>
+          </main>
+        </div>
+      </SParshProvider>
     </NotificationProvider>
   );
 }
