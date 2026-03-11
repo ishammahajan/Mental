@@ -1,5 +1,5 @@
-
 import { HfInference } from '@huggingface/inference';
+import { searchOfflineCounselorKnowledge } from './counselorCopilotData';
 
 const PINECONE_API_KEY = import.meta.env.VITE_PINECONE_API_KEY || '';
 const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || '';
@@ -67,5 +67,54 @@ export async function queryToolkit(queryText: string, topK: number = 3) {
     } catch (e) {
         console.error('Pinecone REST Query Error:', e);
         return [];
+    }
+}
+
+/**
+ * Queries Pinecone for counselor policies and clinical information.
+ * Uses local fallback if Pinecone is unavailable.
+ */
+export async function queryCounselorKnowledge(queryText: string, topK: number = 3) {
+    if (!PINECONE_API_KEY) {
+        // Fallback to local data
+        return await searchOfflineCounselorKnowledge(queryText);
+    }
+
+    try {
+        const queryVector = await generateEmbedding(queryText);
+
+        const describeRes = await fetch('https://api.pinecone.io/indexes/speakup-toolkit', {
+            headers: { 'Api-Key': PINECONE_API_KEY }
+        });
+        if (!describeRes.ok) throw new Error('Failed to fetch Pinecone index host');
+        const describeData = await describeRes.json();
+        const host = describeData.host;
+
+        // Since we don't have a separate namespace physically loaded in Pinecone right now in the MVP,
+        // we simulate hitting the counselor namespace by combining the local clinical data 
+        // with whatever general toolkit mechanisms apply.
+        const queryRes = await fetch(`https://${host}/query`, {
+            method: 'POST',
+            headers: {
+                'Api-Key': PINECONE_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                vector: queryVector,
+                topK: 1, // just get 1 from Pinecone
+                includeMetadata: true
+            })
+        });
+
+        const onlineData = queryRes.ok ? await queryRes.json() : { matches: [] };
+        const pineconeMatches = onlineData.matches?.map((match: any) => match.metadata) || [];
+
+        // Also get offline curated counselor protocols
+        const offlineMatches = await searchOfflineCounselorKnowledge(queryText);
+
+        return [...offlineMatches, ...pineconeMatches];
+    } catch (e) {
+        console.error('Pinecone REST Counselor Query Error:', e);
+        return await searchOfflineCounselorKnowledge(queryText);
     }
 }

@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Pin, Send, XCircle, Home, CheckSquare, Calendar, Lock, Key, Activity, Newspaper, ChevronDown, ChevronUp, Bell, Heart, Upload, LogOut, Sun, CloudRain, Wind, AlertCircle, Trash2, Edit2, Plus, Sword, Map, Settings, ShieldAlert, Sparkles, ChevronRight, MessageSquare, X, Download } from 'lucide-react';
+import { Pin, Send, XCircle, Home, CheckSquare, Calendar, Lock, Key, Activity, Newspaper, ChevronDown, ChevronUp, Bell, Heart, Upload, LogOut, Sun, CloudRain, Wind, AlertCircle, Trash2, Edit2, Plus, Sword, Map, Settings, ShieldAlert, Sparkles, ChevronRight, MessageSquare, X, Download, PenTool, Mic, MicOff } from 'lucide-react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import ProfileDropdown from './ProfileDropdown';
 import ProfileSettingsModal from './ProfileSettingsModal';
 import EnvironmentWidget from './EnvironmentWidget';
 import WellnessOdyssey from './WellnessOdyssey';
+import EphemeralJournal from './EphemeralJournal';
+import MarkdownRenderer from './MarkdownRenderer';
+import { motion, AnimatePresence } from 'framer-motion';
 import { sendMessageToSParsh } from '../services/geminiService';
 import { analyzeSentimentAndSchedule } from '../services/sentimentAgent';
 import { Message, WellnessTask, AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
@@ -81,7 +84,7 @@ const WallPostCard: React.FC<{ post: WellnessPost }> = ({ post }) => {
         <p className="text-[11px] text-slate-400 mb-3">
           📝 {post.authorName} · {new Date(post.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
         </p>
-        <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap flex-1">{preview}</div>
+        <div className="text-sm text-slate-600 leading-relaxed flex-1"><MarkdownRenderer text={preview} /></div>
         {isLong && (
           <div className="mt-3 flex items-center gap-1 text-[#8A9A5B] text-xs font-bold">
             Read full post <ChevronRight size={13} />
@@ -102,8 +105,8 @@ const WallPostCard: React.FC<{ post: WellnessPost }> = ({ post }) => {
                 <X size={20} />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto text-slate-700 leading-relaxed whitespace-pre-wrap text-sm md:text-base scrollbar-hide">
-              {post.body}
+            <div className="p-6 overflow-y-auto text-slate-700 leading-relaxed text-sm md:text-base scrollbar-hide">
+              <MarkdownRenderer text={post.body} />
             </div>
           </div>
         </div>
@@ -125,22 +128,82 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     return namePart.charAt(0).toUpperCase() + namePart.slice(1);
   })();
 
-  const [activeTab, setActiveTab] = useState<'home' | 'tasks' | 'booking'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'tasks' | 'booking' | 'journal'>('home');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const [apiError, setApiError] = useState(false);
   const [showBellDropdown, setShowBellDropdown] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
 
+  // Voice Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Initialize Web Speech API
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; ++i) {
+          transcript += event.results[i][0].transcript;
+        }
+        setInputText(transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error', event.error);
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+    } else {
+      if (!recognitionRef.current) {
+        addNotification({
+          id: Date.now().toString(),
+          message: "Voice dictation isn't entirely supported by this browser yet.",
+          timestamp: Date.now(),
+          type: 'alert'
+        });
+        return;
+      }
+      setInputText(''); // Clear first for direct dictation
+      recognitionRef.current.start();
+      setIsRecording(true);
+    }
+  };
+
   const [tasks, setTasks] = useState<WellnessTask[]>([]);
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot | null>(null);
+
+  // Red Flag Intake Form State
+  const [intakeSlot, setIntakeSlot] = useState<AppointmentSlot | null>(null);
+  const [intakeText, setIntakeText] = useState('');
+  const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
 
   const [showP2P, setShowP2P] = useState(false);
   const [p2pMessages, setP2PMessages] = useState<P2PMessage[]>([]);
@@ -270,9 +333,46 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   useEffect(() => {
     const unsub = subscribeToSlots((updatedSlots) => {
       setSlots(updatedSlots);
+
+      // Follow-up nudge logic: detect 15+ days inactivity
+      const dismissedUntil = localStorage.getItem(`speakup_nudge_dismissed_${userId}`);
+      const isDismissed = dismissedUntil && new Date(dismissedUntil) > new Date();
+
+      if (!isDismissed) {
+        // Find the most recent confirmed slot for this student
+        const myPastSlots = updatedSlots
+          .filter(s => s.bookedByStudentId === userId && s.status === 'confirmed')
+          .map(s => {
+            // Attempt to parse the date string (handles formats like "YYYY-MM-DD" or "Mon, Mar 3" and time)
+            // If it's a relative/short date string, parsing might be tricky, so we fall back to a simple Date parse
+            const dateObj = new Date(`${s.date} ${s.time.replace(/AM|PM/i, '').trim()}`);
+            return isNaN(dateObj.getTime()) ? new Date(s.date) : dateObj;
+          })
+          .filter(d => !isNaN(d.getTime()) && d < new Date()) // only past slots
+          .sort((a, b) => b.getTime() - a.getTime());
+
+        if (myPastSlots.length > 0) {
+          const lastSessionDate = myPastSlots[0];
+          const daysSince = Math.floor((Date.now() - lastSessionDate.getTime()) / (1000 * 60 * 60 * 24));
+
+          // Also check if they have any upcoming confirmed or requested slots
+          const hasUpcoming = updatedSlots.some(s =>
+            s.bookedByStudentId === userId &&
+            (s.status === 'confirmed' || s.status === 'requested') &&
+            new Date(s.date) >= new Date(new Date().setHours(0, 0, 0, 0))
+          );
+
+          if (daysSince >= 15 && !hasUpcoming) {
+            setFollowUpDays(daysSince);
+            setShowFollowUpNudge(true);
+          } else {
+            setShowFollowUpNudge(false);
+          }
+        }
+      }
     });
     return () => unsub();
-  }, []);
+  }, [userId]);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => scrollToBottom(), [messages]);
@@ -294,10 +394,21 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     setIsLoading(true);
     setApiError(false);
 
+    // Create a new AbortController for this request
+    chatAbortRef.current?.abort();
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+
     const validHistory = messages.filter(m => !m.text.includes('Token Limit Reached'));
     const history = validHistory.map(m => ({ role: m.role === 'agent' ? 'model' : m.role, parts: [{ text: m.text }] }));
 
-    const response = await sendMessageToSParsh(history, textToSend);
+    const response = await sendMessageToSParsh(history, textToSend, controller.signal);
+
+    // If aborted (chat was closed), discard the response silently
+    if (controller.signal.aborted) {
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(false);
     setAvatarState('speaking');
@@ -341,6 +452,25 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     await processMessageSend(textToSend);
   };
 
+  // Voice dictation auto-send on silence
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!isRecording || !inputText.trim()) return;
+
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    silenceTimerRef.current = setTimeout(() => {
+      // Auto send after 2.5s of silence
+      setIsRecording(false);
+      recognitionRef.current?.stop();
+      handleSend();
+    }, 2500);
+
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, [inputText, isRecording]);
+
   const toggleTask = async (id: string) => {
     setTasks(tasks.map(t => t.id === id ? { ...t, isCompleted: !t.isCompleted } : t));
     await db.toggleTaskCompletion(userEmail, id);
@@ -352,8 +482,16 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       addNotification('You already have an upcoming session booked.', 'error');
       return;
     }
-    setSelectedSlot(slot);
+    setIntakeSlot(slot);
+    setIntakeText('');
+  };
+
+  const submitIntakeRequest = () => {
+    if (!intakeSlot) return;
+    // Move to consent modal, hold intake text in state
+    setSelectedSlot(intakeSlot);
     setShowConsentModal(true);
+    // Intake form will close automatically when intakeSlot is nullified later
   };
 
   const handleConsentSubmit = async (signature: string | File, mobile?: string) => {
@@ -374,20 +512,31 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
   const completeBooking = async (signatureData: string) => {
     if (!selectedSlot) return;
+
+    setIsSubmittingIntake(true);
+
     const consent: Omit<ConsentData, 'counselorSignature' | 'counselorSignDate' | 'counselorId' | 'counselorName'> = {
       slotId: selectedSlot.id, studentId: userId, studentName,
       studentSignature: signatureData, studentSignDate: new Date().toISOString(),
     };
     await db.saveConsent(consent as ConsentData);
     setIsCloudSyncing(true);
-    const success = await firestoreRequestSlot(selectedSlot.id, userId, studentName);
+
+    // Pass intake text and run triage during requestSlot
+    const success = await firestoreRequestSlot(selectedSlot.id, userId, studentName, intakeText);
+
     setIsCloudSyncing(false);
+    setIsSubmittingIntake(false);
+
     if (success) {
       // subscribeToSlots will update slots list automatically on both student and counselor
       addNotification('Slot requested! Awaiting counselor approval.', 'success');
+      setIntakeSlot(null);
+      setIntakeText('');
     } else {
       addNotification('Failed to book: This slot was just taken by someone else.', 'error');
     }
+
     setShowConsentModal(false);
     setSelectedSlot(null);
   };
@@ -535,6 +684,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           <div className="space-y-4">
             <button onClick={() => setActiveTab('home')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'home' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><Home size={20} /> Home</button>
             <button onClick={() => setActiveTab('tasks')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'tasks' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><CheckSquare size={20} /> Tasks</button>
+            <button onClick={() => setActiveTab('journal')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'journal' ? 'neu-pressed text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-black/5'}`}><PenTool size={20} /> Journal</button>
             <button onClick={() => setActiveTab('booking')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'booking' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><Calendar size={20} /> Slot Booking</button>
           </div>
 
@@ -582,393 +732,494 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
         )}
 
         {/* ── Main Content ───────────────────────────────────────────────── */}
-        <div className="flex-1 p-6 overflow-hidden flex flex-col pb-20 md:pb-6">
+        <div className="flex-1 p-6 overflow-hidden flex flex-col pb-20 md:pb-6 relative">
+          <AnimatePresence mode="wait">
 
-          {/* ── HOME TAB ─────────────────────────────────────────────────── */}
-          {activeTab === 'home' && (
-            <div className="w-full h-full flex flex-col gap-4 overflow-y-auto pr-2 scrollbar-hide">
+            {/* ── HOME TAB ─────────────────────────────────────────────────── */}
+            {activeTab === 'home' && (
+              <motion.div
+                key="home"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="w-full h-full flex flex-col gap-4 overflow-y-auto pr-2 scrollbar-hide absolute inset-0 p-6"
+              >
 
-              {/* Follow-up nudge banner (only for prior bookers, 15+ days) */}
-              {showFollowUpNudge && (
-                <div className="flex-shrink-0 bg-[#f0fdf4] border border-[#8A9A5B]/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-in slide-in-from-top duration-500">
-                  <span className="text-2xl">💚</span>
-                  <div className="flex-1">
-                    <p className="font-bold text-[#4a6741] text-sm">
-                      {followUpDays >= 30 ? 'It\'s been a while — how have you been?' : 'Checking in on you'}
-                    </p>
-                    <p className="text-xs text-[#5a7a51] mt-0.5">
-                      {followUpDays >= 30
-                        ? 'It has been over a month since your last session. Would you like to book a follow-up? There\'s no pressure — we\'re here whenever you\'re ready.'
-                        : 'It\'s been a couple of weeks. You don\'t have to wait until things feel overwhelming. Booking a check-in is always a good idea.'}
-                    </p>
+                {/* Follow-up nudge banner (only for prior bookers, 15+ days) */}
+                {showFollowUpNudge && (
+                  <div className="flex-shrink-0 bg-[#f0fdf4] border border-[#8A9A5B]/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-in slide-in-from-top duration-500">
+                    <span className="text-2xl">💚</span>
+                    <div className="flex-1">
+                      <p className="font-bold text-[#4a6741] text-sm">
+                        {followUpDays >= 30 ? 'It\'s been a while — how have you been?' : 'Checking in on you'}
+                      </p>
+                      <p className="text-xs text-[#5a7a51] mt-0.5">
+                        {followUpDays >= 30
+                          ? 'It has been over a month since your last session. Would you like to book a follow-up? There\'s no pressure — we\'re here whenever you\'re ready.'
+                          : 'It\'s been a couple of weeks. You don\'t have to wait until things feel overwhelming. Booking a check-in is always a good idea.'}
+                      </p>
+                      <button
+                        onClick={() => setActiveTab('booking')}
+                        className="mt-2 text-[11px] font-bold bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg hover:bg-[#76854d] transition-colors"
+                      >
+                        📅 Book a follow-up session
+                      </button>
+                    </div>
                     <button
-                      onClick={() => setActiveTab('booking')}
-                      className="mt-2 text-[11px] font-bold bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg hover:bg-[#76854d] transition-colors"
+                      onClick={() => {
+                        const dismissUntil = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+                        localStorage.setItem(`speakup_nudge_dismissed_${userId}`, dismissUntil);
+                        setShowFollowUpNudge(false);
+                      }}
+                      className="text-[#8A9A5B] hover:text-[#4a6741] flex-shrink-0"
                     >
-                      📅 Book a follow-up session
+                      <X size={16} />
                     </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      const dismissUntil = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
-                      localStorage.setItem(`speakup_nudge_dismissed_${userId}`, dismissUntil);
-                      setShowFollowUpNudge(false);
-                    }}
-                    className="text-[#8A9A5B] hover:text-[#4a6741] flex-shrink-0"
-                  >
-                    <X size={16} />
-                  </button>
+                )}
+
+                {/* Top Row: Environment Widget */}
+                <div className="flex-shrink-0">
+                  <EnvironmentWidget variant="student" />
                 </div>
-              )}
-
-              {/* Top Row: Environment Widget */}
-              <div className="flex-shrink-0">
-                <EnvironmentWidget variant="student" />
-              </div>
 
 
 
-              {/* Open Slots Strip or Upcoming Meeting Ribbon */}
-              {(() => {
-                const activeSlot = slots.find(s => (s.status === 'requested' || s.status === 'confirmed') && s.bookedByStudentId === userId);
-                if (activeSlot) {
-                  return (
-                    <div className="flex-shrink-0 bg-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm animate-in fade-in zoom-in-95">
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-bold text-[#8A9A5B] flex items-center gap-2">
-                          <Calendar size={16} /> Upcoming Meeting with Counsellor
-                        </h3>
-                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${activeSlot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                          {activeSlot.status}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="bg-white p-2 text-center rounded-xl min-w-[60px] shadow-sm flex flex-col items-center justify-center">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase leading-none mb-1">
-                            {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { weekday: 'short' }) : activeSlot.date.split(',')[0].slice(0, 3)}
-                          </p>
-                          <p className="font-black text-[#708090] text-lg leading-none">
-                            {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).getDate() : (activeSlot.date.split(' ')[1] || activeSlot.date.split(',')[0].slice(-2).replace(/[^0-9]/g, ''))}
-                          </p>
-                          <p className="text-[10px] text-[#8A9A5B] font-bold uppercase leading-none mt-1">
-                            {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { month: 'short' }) : activeSlot.date.split(' ').pop()}
-                          </p>
+                {/* Open Slots Strip or Upcoming Meeting Ribbon */}
+                {(() => {
+                  const activeSlot = slots.find(s => (s.status === 'requested' || s.status === 'confirmed') && s.bookedByStudentId === userId);
+                  if (activeSlot) {
+                    return (
+                      <div className="flex-shrink-0 bg-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm animate-in fade-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-bold text-[#8A9A5B] flex items-center gap-2">
+                            <Calendar size={16} /> Upcoming Meeting with Counsellor
+                          </h3>
+                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${activeSlot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                            {activeSlot.status}
+                          </span>
                         </div>
-                        <div>
-                          <p className="font-bold text-[#708090] text-sm">{activeSlot.time}</p>
-                          <p className="text-xs text-slate-500">{COUNSELORS.find(c => c.id === activeSlot.counselorId)?.name || 'Counsellor'}</p>
+                        <div className="flex items-center gap-3">
+                          <div className="bg-white p-2 text-center rounded-xl min-w-[60px] shadow-sm flex flex-col items-center justify-center">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase leading-none mb-1">
+                              {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { weekday: 'short' }) : activeSlot.date.split(',')[0].slice(0, 3)}
+                            </p>
+                            <p className="font-black text-[#708090] text-lg leading-none">
+                              {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).getDate() : (activeSlot.date.split(' ')[1] || activeSlot.date.split(',')[0].slice(-2).replace(/[^0-9]/g, ''))}
+                            </p>
+                            <p className="text-[10px] text-[#8A9A5B] font-bold uppercase leading-none mt-1">
+                              {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { month: 'short' }) : activeSlot.date.split(' ').pop()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="font-bold text-[#708090] text-sm">{activeSlot.time}</p>
+                            <p className="text-xs text-slate-500">{COUNSELORS.find(c => c.id === activeSlot.counselorId)?.name || 'Counsellor'}</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                }
+                    );
+                  }
 
-                if (slots.filter(s => s.status === 'open').length > 0) {
-                  return (
-                    <div className="flex-shrink-0 bg-white/40 p-4 rounded-3xl border border-white/50">
-                      <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-bold text-[#708090] flex items-center gap-2"><Calendar size={16} /> Available Counselling Slots</h3>
-                        <button onClick={() => setActiveTab('booking')} className="text-[#8A9A5B] text-xs font-bold hover:underline">Book Now</button>
-                      </div>
-                      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-                        {slots.filter(s => s.status === 'open').slice(0, 3).map(slot => (
-                          <button key={slot.id} onClick={() => { handleBookSlot(slot); setActiveTab('booking'); }} className="flex-shrink-0 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 min-w-[140px] text-left hover:scale-105 active:scale-95 transition-transform">
-                            <p className="text-xs text-slate-400 font-bold uppercase">{slot.date}</p>
-                            <p className="font-bold text-[#708090]">{slot.time}</p>
-                            <p className="text-[10px] text-slate-500 truncate">{COUNSELORS.find(c => c.id === slot.counselorId)?.name || 'Counsellor'}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* RAG Gamification Launchpad */}
-              <div className="flex-shrink-0 bg-indigo-900/10 p-4 rounded-3xl border border-indigo-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div>
-                  <h3 className="font-bold text-indigo-900 flex items-center gap-2"><Sparkles size={16} /> Interactive Quests</h3>
-                  <p className="text-xs text-indigo-800/70">Play gamified cognitive exercises crafted by your counselor.</p>
-                </div>
-                <button onClick={() => setOdyssey({ open: true, type: 'GAD7' })} className="bg-indigo-600 font-bold text-white px-5 py-2 rounded-xl text-sm shadow-md hover:bg-indigo-500 transition-colors whitespace-nowrap">
-                  Open Quest Hub
-                </button>
-              </div>
-
-              {/* RAG Recommended Toolkits (Phase 1) */}
-              {recommendedToolkits.length > 0 && (
-                <div className="flex-shrink-0 bg-gradient-to-br from-[#8A9A5B]/10 to-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles size={18} className="text-[#8A9A5B]" />
-                    <h3 className="font-bold text-[#708090] text-lg">Recommended For You</h3>
-                    <span className="text-[10px] bg-[#8A9A5B]/20 text-[#8A9A5B] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">AI Curated</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {recommendedToolkits.map((tk, idx) => (
-                      <div key={idx} className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-white flex flex-col">
-                        <p className="text-sm font-medium text-slate-700 leading-relaxed mb-3 flex-1">{tk.text}</p>
-                        <div className="flex flex-wrap gap-1 mt-auto">
-                          {tk.tags?.map((tag: string, tidx: number) => (
-                            <span key={tidx} className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md uppercase tracking-wide">#{tag}</span>
+                  if (slots.filter(s => s.status === 'open').length > 0) {
+                    return (
+                      <div className="flex-shrink-0 bg-white/40 p-4 rounded-3xl border border-white/50">
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-bold text-[#708090] flex items-center gap-2"><Calendar size={16} /> Available Counselling Slots</h3>
+                          <button onClick={() => setActiveTab('booking')} className="text-[#8A9A5B] text-xs font-bold hover:underline">Book Now</button>
+                        </div>
+                        <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+                          {slots.filter(s => s.status === 'open').slice(0, 3).map(slot => (
+                            <button key={slot.id} onClick={() => { handleBookSlot(slot); setActiveTab('booking'); }} className="flex-shrink-0 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 min-w-[140px] text-left hover:scale-105 active:scale-95 transition-transform">
+                              <p className="text-xs text-slate-400 font-bold uppercase">{slot.date}</p>
+                              <p className="font-bold text-[#708090]">{slot.time}</p>
+                              <p className="text-[10px] text-slate-500 truncate">{COUNSELORS.find(c => c.id === slot.counselorId)?.name || 'Counsellor'}</p>
+                            </button>
                           ))}
                         </div>
                       </div>
-                    ))}
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* RAG Gamification Launchpad */}
+                <div className="flex-shrink-0 bg-indigo-900/10 p-4 rounded-3xl border border-indigo-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div>
+                    <h3 className="font-bold text-indigo-900 flex items-center gap-2"><Sparkles size={16} /> Interactive Quests</h3>
+                    <p className="text-xs text-indigo-800/70">Play gamified cognitive exercises crafted by your counselor.</p>
                   </div>
+                  <button onClick={() => setOdyssey({ open: true, type: 'GAD7' })} className="bg-indigo-600 font-bold text-white px-5 py-2 rounded-xl text-sm shadow-md hover:bg-indigo-500 transition-colors whitespace-nowrap">
+                    Open Quest Hub
+                  </button>
                 </div>
-              )}
 
-              {/* Middle Row: Wellness Wall (Ribbon View) */}
-              <div className="flex-shrink-0">
-                <div className="flex items-center gap-2 mb-3">
-                  <Newspaper size={18} className="text-[#8A9A5B]" />
-                  <h3 className="font-bold text-[#708090] text-lg">Wellness Wall</h3>
-                  <span className="text-xs bg-[#8A9A5B]/10 text-[#8A9A5B] px-2 py-0.5 rounded-full">From the Counselling Cell</span>
-                </div>
-                {posts.length === 0 ? (
-                  <div className="bg-white/60 rounded-2xl p-6 text-center text-slate-400">
-                    <Newspaper size={24} className="mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No posts yet. Check back soon!</p>
-                  </div>
-                ) : (
-                  <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide snap-x">
-                    {posts.map((post, idx) => (
-                      <div key={post.id} className={`snap-start flex-shrink-0 ${idx === 0 ? 'w-[85%] md:w-[60%]' : 'w-[55%] md:w-[35%]'}`}>
-                        <WallPostCard post={post} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Row: Tasks (Left) + Workload Meter (Right) Tiles */}
-              <div className="flex-none grid grid-cols-2 gap-4 min-h-[160px]">
-                {/* Tasks Column - Standard Gradient Tile */}
-                <button onClick={() => setActiveTab('tasks')} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full">
-                  <CheckSquare size={32} className="mb-3 opacity-90" />
-                  <h3 className="font-bold text-lg md:text-xl text-center mb-1">Wellness Quests</h3>
-                  <p className="text-xs md:text-sm opacity-80 text-center">{tasks.filter(t => t.assignedBy !== 'system').length} Active Tasks · Tap</p>
-                </button>
-
-                {/* Workload Meter Column - Standard Gradient Tile */}
-                <button onClick={() => { }} className="bg-gradient-to-br from-[#8A9A5B] to-[#76854d] rounded-3xl p-4 flex flex-col items-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full group relative overflow-hidden">
-                  <div className="flex justify-between items-center mb-2 flex-shrink-0 w-full relative z-10">
-                    <h3 className="font-bold flex items-center gap-1.5 md:gap-2 text-sm md:text-base"><Activity size={16} /> Workload</h3>
-                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">Peak Load</span>
-                  </div>
-                  <div className="flex-1 w-full mx-[-10px] mb-[-10px] relative z-10">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
-                        <Area type="monotone" dataKey="stress" stroke="#ffffff" fillOpacity={0.4} fill="#ffffff" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── TASKS TAB ─────────────────────────────────────────────────── */}
-          {activeTab === 'tasks' && (
-            <div className="animate-in slide-in-from-bottom-10 duration-500 space-y-6">
-              <h2 className="text-2xl font-bold text-[#708090]">Wellness Routines</h2>
-
-              {/* ── Standard Quests (GAD-7 + BDI) — shown to all students ── */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Sword size={16} className="text-emerald-600" />
-                  <h3 className="font-bold text-slate-600 text-base">Standard Quests</h3>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Wellness Odyssey</span>
-                </div>
-                <div className="grid grid-cols-1 gap-4">
-                  {/* GAD-7 Quest */}
-                  <div className="bg-gradient-to-br from-indigo-900 via-slate-800 to-indigo-900 rounded-2xl p-5 border border-indigo-700/40 shadow-lg">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="text-2xl mb-1">🌀</div>
-                        <h4 className="font-black text-white text-base">The Anxiety Realm</h4>
-                        <p className="text-indigo-300 text-xs">GAD-7 · 7 Guardians · Up to 140 XP</p>
-                        <p className="text-slate-400 text-xs mt-1">A brief survey measuring generalized anxiety symptoms.</p>
-                      </div>
-                      <button onClick={() => setOdyssey({ open: true, type: 'GAD7' })}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 flex items-center gap-1.5">
-                        <Map size={14} /> Begin
-                      </button>
+                {/* RAG Recommended Toolkits (Phase 1) */}
+                {recommendedToolkits.length > 0 && (
+                  <div className="flex-shrink-0 bg-gradient-to-br from-[#8A9A5B]/10 to-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles size={18} className="text-[#8A9A5B]" />
+                      <h3 className="font-bold text-[#708090] text-lg">Recommended For You</h3>
+                      <span className="text-[10px] bg-[#8A9A5B]/20 text-[#8A9A5B] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">AI Curated</span>
                     </div>
-                  </div>
-
-                  {/* BDI Quest */}
-                  <div className="bg-gradient-to-br from-purple-900 via-slate-800 to-purple-900 rounded-2xl p-5 border border-purple-700/40 shadow-lg">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="text-2xl mb-1">🌑</div>
-                        <h4 className="font-black text-white text-base">The Depression Depths</h4>
-                        <p className="text-purple-300 text-xs">BDI-II · 21 Guardians · Up to 420 XP</p>
-                        <p className="text-slate-400 text-xs mt-1">Beck's Depression Inventory — an evidence-based wellness check-in.</p>
-                      </div>
-                      <button onClick={() => setOdyssey({ open: true, type: 'BDI' })}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 flex items-center gap-1.5">
-                        <Map size={14} /> Begin
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Custom Forged Quests ── */}
-              {Object.keys(forgedGames).length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3 mt-6">
-                    <Sparkles size={16} className="text-indigo-600" />
-                    <h3 className="font-bold text-slate-600 text-base">Interactive Quests</h3>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">Custom Forged</span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4">
-                    {Object.entries(forgedGames).map(([gameId, gameValue]) => {
-                      const game = gameValue as GameMetadata;
-                      return (
-                        <div key={gameId} className="bg-gradient-to-br from-slate-800 to-indigo-950 rounded-2xl p-5 border border-indigo-700/40 shadow-lg">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="text-2xl mb-1">✨</div>
-                              <h4 className="font-black text-white text-base">{game.title}</h4>
-                              <p className="text-indigo-300 text-xs uppercase tracking-wide font-medium mt-1">{game.paradigm}</p>
-                            </div>
-                            <button onClick={() => setOdyssey({ open: true, type: gameId as any })}
-                              className="bg-indigo-500 hover:bg-indigo-400 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 flex items-center gap-1.5 mt-2">
-                              <Map size={14} /> Begin
-                            </button>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {recommendedToolkits.map((tk, idx) => (
+                        <div key={idx} className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-white flex flex-col">
+                          <p className="text-sm font-medium text-slate-700 leading-relaxed mb-3 flex-1">{tk.text}</p>
+                          <div className="flex flex-wrap gap-1 mt-auto">
+                            {tk.tags?.map((tag: string, tidx: number) => (
+                              <span key={tidx} className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md uppercase tracking-wide">#{tag}</span>
+                            ))}
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {/* ── Counsellor-Assigned Tasks ── */}
-              <div>
-                <h3 className="font-bold text-slate-600 text-base mb-3">Assigned by Counsellor</h3>
-                {tasks.filter(t => t.assignedBy !== 'system').length === 0 && (
-                  <p className="text-center text-slate-400 text-sm py-4">No tasks assigned yet by your counsellor.</p>
                 )}
-                <div className="space-y-4">
-                  {tasks.filter(t => t.assignedBy !== 'system').map(task => (
-                    <div key={task.id} onClick={() => toggleTask(task.id)} className={`p-4 rounded-2xl flex items-center gap-4 transition-all cursor-pointer ${task.isCompleted ? 'neu-pressed opacity-60' : 'neu-flat'}`}>
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.isCompleted ? 'border-[#8A9A5B] bg-[#8A9A5B]' : 'border-slate-400'}`}>
-                        {task.isCompleted && <CheckSquare size={14} className="text-white" />}
-                      </div>
-                      <div>
-                        <h4 className={`font-bold ${task.isCompleted ? 'text-slate-400 line-through' : 'text-[#708090]'}`}>{task.title}</h4>
-                        <p className="text-xs text-slate-400">Assigned by {task.assignedBy}</p>
+
+                {/* Middle Row: Wellness Wall (Ribbon View) */}
+                <div className="flex-shrink-0">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Newspaper size={18} className="text-[#8A9A5B]" />
+                    <h3 className="font-bold text-[#708090] text-lg">Wellness Wall</h3>
+                    <span className="text-xs bg-[#8A9A5B]/10 text-[#8A9A5B] px-2 py-0.5 rounded-full">From the Counselling Cell</span>
+                  </div>
+                  {posts.length === 0 ? (
+                    <div className="bg-white/60 rounded-2xl p-6 text-center text-slate-400">
+                      <Newspaper size={24} className="mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">No posts yet. Check back soon!</p>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide snap-x">
+                      {posts.map((post, idx) => (
+                        <div key={post.id} className={`snap-start flex-shrink-0 ${idx === 0 ? 'w-[85%] md:w-[60%]' : 'w-[55%] md:w-[35%]'}`}>
+                          <WallPostCard post={post} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Row: Tasks (Left) + Workload Meter (Right) Tiles */}
+                <div className="flex-none grid grid-cols-2 gap-4 min-h-[160px]">
+                  {/* Tasks Column - Standard Gradient Tile */}
+                  <button onClick={() => setActiveTab('tasks')} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full">
+                    <CheckSquare size={32} className="mb-3 opacity-90" />
+                    <h3 className="font-bold text-lg md:text-xl text-center mb-1">Wellness Quests</h3>
+                    <p className="text-xs md:text-sm opacity-80 text-center">{tasks.filter(t => t.assignedBy !== 'system').length} Active Tasks · Tap</p>
+                  </button>
+
+                  {/* Workload Meter Column - Standard Gradient Tile */}
+                  <button onClick={() => { }} className="bg-gradient-to-br from-[#8A9A5B] to-[#76854d] rounded-3xl p-4 flex flex-col items-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full group relative overflow-hidden">
+                    <div className="flex justify-between items-center mb-2 flex-shrink-0 w-full relative z-10">
+                      <h3 className="font-bold flex items-center gap-1.5 md:gap-2 text-sm md:text-base"><Activity size={16} /> Workload</h3>
+                      <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">Peak Load</span>
+                    </div>
+                    <div className="flex-1 w-full mx-[-10px] mb-[-10px] relative z-10">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                          <Area type="monotone" dataKey="stress" stroke="#ffffff" fillOpacity={0.4} fill="#ffffff" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── TASKS TAB ─────────────────────────────────────────────────── */}
+            {activeTab === 'tasks' && (
+              <motion.div
+                key="tasks"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-6"
+              >
+                <h2 className="text-2xl font-bold text-[#708090]">Wellness Routines</h2>
+
+                {/* ── Standard Quests (GAD-7 + BDI) — shown to all students ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sword size={16} className="text-emerald-600" />
+                    <h3 className="font-bold text-slate-600 text-base">Standard Quests</h3>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Wellness Odyssey</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {/* GAD-7 Quest */}
+                    <div className="bg-gradient-to-br from-indigo-900 via-slate-800 to-indigo-900 rounded-2xl p-5 border border-indigo-700/40 shadow-lg">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="text-2xl mb-1">🌀</div>
+                          <h4 className="font-black text-white text-base">The Anxiety Realm</h4>
+                          <p className="text-indigo-300 text-xs">GAD-7 · 7 Guardians · Up to 140 XP</p>
+                          <p className="text-slate-400 text-xs mt-1">A brief survey measuring generalized anxiety symptoms.</p>
+                        </div>
+                        <button onClick={() => setOdyssey({ open: true, type: 'GAD7' })}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 flex items-center gap-1.5">
+                          <Map size={14} /> Begin
+                        </button>
                       </div>
                     </div>
-                  ))}
+
+                    {/* BDI Quest */}
+                    <div className="bg-gradient-to-br from-purple-900 via-slate-800 to-purple-900 rounded-2xl p-5 border border-purple-700/40 shadow-lg">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="text-2xl mb-1">🌑</div>
+                          <h4 className="font-black text-white text-base">The Depression Depths</h4>
+                          <p className="text-purple-300 text-xs">BDI-II · 21 Guardians · Up to 420 XP</p>
+                          <p className="text-slate-400 text-xs mt-1">Beck's Depression Inventory — an evidence-based wellness check-in.</p>
+                        </div>
+                        <button onClick={() => setOdyssey({ open: true, type: 'BDI' })}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 flex items-center gap-1.5">
+                          <Map size={14} /> Begin
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* AI Cognitive Reframer Quest */}
+                    <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 rounded-2xl p-5 border border-purple-500/40 shadow-lg relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl" />
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-2xl">🧠</span>
+                            <span className="text-[10px] bg-purple-500/20 border border-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold shadow-sm">AI Assistant</span>
+                          </div>
+                          <h4 className="font-black text-white text-base">Cognitive Reframer</h4>
+                          <p className="text-purple-300 text-xs mt-0.5">CBT Perspective Shift · Infinite Use</p>
+                          <p className="text-slate-400 text-sm mt-2 max-w-sm leading-snug">Caught in a negative thought loop? Use SParsh AI to identify distortions and find a balanced perspective.</p>
+                        </div>
+                        <button onClick={() => setOdyssey({ open: true, type: 'REFRAME' })}
+                          className="w-full sm:w-auto bg-purple-500 hover:bg-purple-400 text-white font-bold px-6 py-2.5 rounded-xl text-sm shadow-lg shadow-purple-500/30 transition-all hover:scale-105 flex items-center justify-center gap-2 border border-purple-400/50">
+                          <Sparkles size={16} /> Reframe Thought
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* Consent Modal */}
-          {showConsentModal && selectedSlot && (
-            <ConsentForm role="student" studentName={studentName} program="PGDM"
-              onClose={() => setShowConsentModal(false)} onSubmit={handleConsentSubmit} user={user} />
-          )}
-          {showProfileSettings && (
-            <ProfileSettingsModal user={user} onClose={() => setShowProfileSettings(false)} onSave={handleProfileSave} />
-          )}
+                {/* ── Custom Forged Quests ── */}
+                {Object.keys(forgedGames).length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 mt-6">
+                      <Sparkles size={16} className="text-indigo-600" />
+                      <h3 className="font-bold text-slate-600 text-base">Interactive Quests</h3>
+                      <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">Custom Forged</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4">
+                      {Object.entries(forgedGames).map(([gameId, gameValue]) => {
+                        const game = gameValue as GameMetadata;
+                        return (
+                          <div key={gameId} className="bg-gradient-to-br from-slate-800 to-indigo-950 rounded-2xl p-5 border border-indigo-700/40 shadow-lg">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <div className="text-2xl mb-1">✨</div>
+                                <h4 className="font-black text-white text-base">{game.title}</h4>
+                                <p className="text-indigo-300 text-xs uppercase tracking-wide font-medium mt-1">{game.paradigm}</p>
+                              </div>
+                              <button onClick={() => setOdyssey({ open: true, type: gameId as any })}
+                                className="bg-indigo-500 hover:bg-indigo-400 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 flex items-center gap-1.5 mt-2">
+                                <Map size={14} /> Begin
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-          {/* ── BOOKING TAB ───────────────────────────────────────────────── */}
-          {activeTab === 'booking' && (
-            <div className="animate-in slide-in-from-right-10 duration-500 space-y-4">
-              <h3 className="text-xl font-bold text-[#708090] mb-2">Book a Sanctuary Slot</h3>
-              <p className="text-xs text-slate-400 mb-5">Slots are published by your counselor. Tap "Book" to request — they'll confirm shortly.</p>
-
-              {slots.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400 neu-flat rounded-2xl">
-                  <Calendar size={36} className="mb-3 opacity-30" />
-                  <p className="font-bold text-slate-500 mb-1">No slots published yet</p>
-                  <p className="text-xs text-center">Your counselor hasn't added any sessions. Check back soon.</p>
+                {/* ── Counsellor-Assigned Tasks ── */}
+                <div>
+                  <h3 className="font-bold text-slate-600 text-base mb-3">Assigned by Counsellor</h3>
+                  {tasks.filter(t => t.assignedBy !== 'system').length === 0 && (
+                    <p className="text-center text-slate-400 text-sm py-4">No tasks assigned yet by your counsellor.</p>
+                  )}
+                  <div className="space-y-4">
+                    {tasks.filter(t => t.assignedBy !== 'system').map(task => (
+                      <div key={task.id} onClick={() => toggleTask(task.id)} className={`p-4 rounded-2xl flex items-center gap-4 transition-all cursor-pointer ${task.isCompleted ? 'neu-pressed opacity-60' : 'neu-flat'}`}>
+                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.isCompleted ? 'border-[#8A9A5B] bg-[#8A9A5B]' : 'border-slate-400'}`}>
+                          {task.isCompleted && <CheckSquare size={14} className="text-white" />}
+                        </div>
+                        <div>
+                          <h4 className={`font-bold ${task.isCompleted ? 'text-slate-400 line-through' : 'text-[#708090]'}`}>{task.title}</h4>
+                          <p className="text-xs text-slate-400">Assigned by {task.assignedBy}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : slots.map(slot => {
-                const isMyBooking = slot.bookedByStudentId === userId;
-                const isOpen = slot.status === 'open';
-                const isRequested = slot.status === 'requested';
-                const isConfirmed = slot.status === 'confirmed';
+              </motion.div>
+            )}
 
-                return (
-                  <div key={slot.id} className={`rounded-2xl p-4 border transition-all ${isMyBooking && isConfirmed ? 'bg-green-50 border-green-200' :
-                    isMyBooking && isRequested ? 'bg-amber-50 border-amber-200' :
-                      isOpen ? 'neu-flat border-transparent' :
-                        'bg-gray-50 border-gray-200 opacity-60'
-                    }`}>
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex-1">
-                        <div className="font-bold text-[#708090]">{slot.counselorName}</div>
-                        <div className="text-sm text-slate-400 mt-0.5">{slot.date} · {slot.time}</div>
-                        {/* Status badge */}
-                        <div className="mt-2">
+            {/* ── JOURNAL TAB ───────────────────────────────────────────────── */}
+            {activeTab === 'journal' && (
+              <motion.div
+                key="journal"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="absolute inset-0 p-4 md:p-6 overflow-hidden"
+              >
+                <EphemeralJournal />
+              </motion.div>
+            )}
+
+            {/* Consent Modal */}
+            {showConsentModal && selectedSlot && (
+              <ConsentForm role="student" studentName={studentName} program="PGDM"
+                onClose={() => setShowConsentModal(false)} onSubmit={handleConsentSubmit} user={user} />
+            )}
+            {showProfileSettings && (
+              <ProfileSettingsModal user={user} onClose={() => setShowProfileSettings(false)} onSave={handleProfileSave} />
+            )}
+
+            {/* ── BOOKING TAB ───────────────────────────────────────────────── */}
+            {activeTab === 'booking' && (
+              <motion.div
+                key="booking"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-4"
+              >
+                <h3 className="text-xl font-bold text-[#708090] mb-2">Book a Sanctuary Slot</h3>
+                <p className="text-xs text-slate-400 mb-5">Slots are published by your counselor. Tap "Book" to request — they'll confirm shortly.</p>
+
+                {slots.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400 neu-flat rounded-2xl">
+                    <Calendar size={36} className="mb-3 opacity-30" />
+                    <p className="font-bold text-slate-500 mb-1">No slots published yet</p>
+                    <p className="text-xs text-center">Your counselor hasn't added any sessions. Check back soon.</p>
+                  </div>
+                ) : slots.map(slot => {
+                  const isMyBooking = slot.bookedByStudentId === userId;
+                  const isOpen = slot.status === 'open';
+                  const isRequested = slot.status === 'requested';
+                  const isConfirmed = slot.status === 'confirmed';
+
+                  return (
+                    <div key={slot.id} className={`rounded-2xl p-4 border transition-all ${isMyBooking && isConfirmed ? 'bg-green-50 border-green-200' :
+                      isMyBooking && isRequested ? 'bg-amber-50 border-amber-200' :
+                        isOpen ? 'neu-flat border-transparent' :
+                          'bg-gray-50 border-gray-200 opacity-60'
+                      }`}>
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1">
+                          <div className="font-bold text-[#708090]">{slot.counselorName}</div>
+                          <div className="text-sm text-slate-400 mt-0.5">{slot.date} · {slot.time}</div>
+                          {/* Status badge */}
+                          <div className="mt-2">
+                            {isMyBooking && isConfirmed && (
+                              <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                                ✓ Confirmed — see you then!
+                              </span>
+                            )}
+                            {isMyBooking && isRequested && (
+                              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                                ⏳ Awaiting counselor approval
+                              </span>
+                            )}
+                            {!isMyBooking && !isOpen && (
+                              <span className="text-[11px] text-slate-400 italic">Booked by another student</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                          {/* Download consent — confirmed only */}
                           {isMyBooking && isConfirmed && (
-                            <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
-                              ✓ Confirmed — see you then!
-                            </span>
+                            <button
+                              onClick={() => downloadConsentAsPDF(slot.id)}
+                              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition-colors"
+                            >
+                              <Download size={13} /> Consent
+                            </button>
+                          )}
+                          {/* Book / Cancel / Disabled */}
+                          {isOpen && intakeSlot?.id !== slot.id && (
+                            <button
+                              onClick={() => handleBookSlot(slot)}
+                              className="px-4 py-2 rounded-xl text-sm font-bold bg-[#8A9A5B] text-white hover:bg-[#76854d] transition-all active:scale-95 shadow-sm"
+                            >
+                              Book
+                            </button>
                           )}
                           {isMyBooking && isRequested && (
-                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
-                              ⏳ Awaiting counselor approval
+                            <button
+                              onClick={() => handleCancelSlot(slot.id)}
+                              className="px-4 py-2 rounded-xl text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all active:scale-95"
+                            >
+                              Cancel Request
+                            </button>
+                          )}
+                          {isMyBooking && isConfirmed && (
+                            <span className="text-[10px] text-slate-400 italic text-right max-w-[120px]">
+                              Message counselor to cancel
                             </span>
                           )}
-                          {!isMyBooking && !isOpen && (
-                            <span className="text-[11px] text-slate-400 italic">Booked by another student</span>
+                          {!isOpen && !isMyBooking && (
+                            <button disabled className="px-4 py-2 rounded-xl text-sm font-bold bg-gray-200 text-gray-400 cursor-not-allowed">
+                              Taken
+                            </button>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                        {/* Download consent — confirmed only */}
-                        {isMyBooking && isConfirmed && (
-                          <button
-                            onClick={() => downloadConsentAsPDF(slot.id)}
-                            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition-colors"
-                          >
-                            <Download size={13} /> Consent
-                          </button>
-                        )}
-                        {/* Book / Cancel / Disabled */}
-                        {isOpen && (
-                          <button
-                            onClick={() => handleBookSlot(slot)}
-                            className="px-4 py-2 rounded-xl text-sm font-bold bg-[#8A9A5B] text-white hover:bg-[#76854d] transition-all active:scale-95 shadow-sm"
-                          >
-                            Book
-                          </button>
-                        )}
-                        {isMyBooking && isRequested && (
-                          <button
-                            onClick={() => handleCancelSlot(slot.id)}
-                            className="px-4 py-2 rounded-xl text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all active:scale-95"
-                          >
-                            Cancel Request
-                          </button>
-                        )}
-                        {isMyBooking && isConfirmed && (
-                          <span className="text-[10px] text-slate-400 italic text-right max-w-[120px]">
-                            Message counselor to cancel
-                          </span>
-                        )}
-                        {!isOpen && !isMyBooking && (
-                          <button disabled className="px-4 py-2 rounded-xl text-sm font-bold bg-gray-200 text-gray-400 cursor-not-allowed">
-                            Taken
-                          </button>
-                        )}
-                      </div>
+                      {/* Intake Dropdown View (If selected) */}
+                      {intakeSlot?.id === slot.id && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-4 pt-4 border-t border-slate-200"
+                        >
+                          <div className="bg-white rounded-xl p-4 border border-slate-200">
+                            <label className="block text-sm font-bold text-slate-700 mb-2">
+                              What would you like to discuss? <span className="text-slate-400 font-normal">(Optional)</span>
+                            </label>
+                            <textarea
+                              value={intakeText}
+                              onChange={(e) => setIntakeText(e.target.value)}
+                              placeholder="Briefly describe what's on your mind... (e.g., Feeling overwhelmed with finals, having roommate issues)"
+                              className="w-full text-sm p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8A9A5B]/50 resize-none min-h-[80px]"
+                            />
+                            <div className="flex items-center gap-1.5 mt-2 mb-4 text-[10px] text-slate-500 bg-slate-50 p-2 rounded-lg">
+                              <ShieldAlert size={12} className="text-[#8A9A5B] flex-shrink-0" />
+                              <p>This text is reviewed by AI to help counselors prioritize urgent requests. It is kept private between you and your counselor.</p>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 mt-4">
+                              <button
+                                onClick={() => { setIntakeSlot(null); setIntakeText(''); }}
+                                className="px-4 py-2 rounded-lg text-sm font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={submitIntakeRequest}
+                                disabled={isSubmittingIntake}
+                                className="px-5 py-2 rounded-lg text-sm font-bold bg-[#8A9A5B] text-white hover:bg-[#76854d] transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                              >
+                                {isSubmittingIntake ? 'Sending...' : 'Confirm Request'}
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </motion.div>
+            )}
+
+          </AnimatePresence>
         </div>
       </div>
 
@@ -995,7 +1246,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 <Lock size={9} /> Free API · Locally Encrypted
               </span>
             </div>
-            <button onClick={() => setIsChatOpen(false)} className="text-slate-400 hover:text-slate-600"><XCircle size={18} /></button>
+            <button onClick={() => { chatAbortRef.current?.abort(); setIsChatOpen(false); }} className="text-slate-400 hover:text-slate-600"><XCircle size={18} /></button>
           </div>
 
           {/* Privacy notice banner */}
@@ -1079,11 +1330,26 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center bg-white rounded-xl border border-gray-200 p-1.5 focus-within:ring-2 focus-within:ring-[#8A9A5B]/50 transition-shadow shadow-sm">
               <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && inputText.trim()) { handleSend(); } }} placeholder="Speak to SParsh..."
-                className="flex-1 p-2 rounded-lg border border-gray-200 outline-none text-sm" />
-              <button disabled={!inputText.trim()} onClick={handleSend} className="bg-[#8A9A5B] disabled:bg-[#8A9A5B]/50 text-white p-2 rounded-lg transition-colors"><Send size={18} /></button>
+                onKeyDown={(e) => { if (e.key === 'Enter' && inputText.trim()) { handleSend(); } }} placeholder={isRecording ? "Listening..." : "Speak to SParsh..."}
+                className="flex-1 p-2 outline-none text-sm bg-transparent" />
+
+              <button
+                onClick={toggleRecording}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${isRecording ? 'text-red-500 animate-pulse bg-red-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                title="Dictate with voice"
+              >
+                {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
+              </button>
+
+              <button
+                disabled={!inputText.trim()}
+                onClick={handleSend}
+                className="bg-[#8A9A5B] disabled:bg-[#8A9A5B]/50 text-white p-2 rounded-lg transition-colors flex-shrink-0"
+              >
+                <Send size={18} />
+              </button>
             </div>
           </div>
         </div>

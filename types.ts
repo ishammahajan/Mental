@@ -61,6 +61,7 @@ export interface AppointmentSlot {
   status: 'open' | 'requested' | 'confirmed';
   bookedByStudentId?: string;
   bookedByStudentName?: string;
+  priority?: 'high' | 'normal';
 }
 
 export interface WellnessTask {

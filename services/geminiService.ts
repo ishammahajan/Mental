@@ -45,9 +45,12 @@ const buildMessages = (
   ];
 
 // ─── Tier 1: HuggingFace direct from browser ─────────────────────────────────
-const tryHuggingFaceDirect = async (messages: ChatMessage[]): Promise<string | null> => {
+const tryHuggingFaceDirect = async (messages: ChatMessage[], signal?: AbortSignal): Promise<string | null> => {
   if (!HF_TOKEN) return null;
   try {
+    // Combine caller abort signal with a 20s timeout
+    const timeoutSignal = AbortSignal.timeout(20000);
+    const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
     const res = await fetch(HF_URL, {
       method: 'POST',
       headers: {
@@ -55,7 +58,7 @@ const tryHuggingFaceDirect = async (messages: ChatMessage[]): Promise<string | n
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ model: HF_MODEL, messages, max_tokens: 512, temperature: 0.7 }),
-      signal: AbortSignal.timeout(20000),
+      signal: combinedSignal,
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -66,13 +69,15 @@ const tryHuggingFaceDirect = async (messages: ChatMessage[]): Promise<string | n
 };
 
 // ─── Tier 2: Node.js proxy fallback ──────────────────────────────────────────
-const tryProxy = async (messages: ChatMessage[]): Promise<string | null> => {
+const tryProxy = async (messages: ChatMessage[], signal?: AbortSignal): Promise<string | null> => {
   try {
+    const timeoutSignal = AbortSignal.timeout(20000);
+    const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
     const res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages }),
-      signal: AbortSignal.timeout(20000),
+      signal: combinedSignal,
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -151,6 +156,7 @@ const isCrisisOutput = (text: string): boolean =>
 export const sendMessageToSParsh = async (
   history: { role: string; parts: { text: string }[] }[],
   newMessage: string,
+  signal?: AbortSignal,
 ): Promise<SParshResponse> => {
 
   // Tier-1 crisis kill-switch — zero latency, fires before any API call
@@ -179,12 +185,12 @@ export const sendMessageToSParsh = async (
   let modelUsed: SParshResponse['modelUsed'] = 'offline';
 
   // Tier 1: Direct HuggingFace call
-  rawText = await tryHuggingFaceDirect(messages);
+  rawText = await tryHuggingFaceDirect(messages, signal);
   if (rawText) modelUsed = 'huggingface_direct';
 
   // Tier 2: Node proxy
   if (!rawText) {
-    rawText = await tryProxy(messages);
+    rawText = await tryProxy(messages, signal);
     if (rawText) modelUsed = 'proxy';
   }
 
@@ -231,4 +237,43 @@ export const getAIWeatherSuggestion = async (weather: WeatherData): Promise<stri
   } catch { /* fall through */ }
 
   return "Take a deep breath and find a moment of calm today 🌿";
+};
+
+// ─── Phase 3 AI Features ──────────────────────────────────────────────────────
+export const generateCognitiveReframe = async (thought: string): Promise<string | null> => {
+  const systemPrompt = `You are a clinical psychology assistant specializing in Cognitive Behavioral Therapy (CBT).
+The user will provide a negative automatic thought.
+Your task:
+1. Identify the primary cognitive distortion (e.g., Catastrophizing, Black-and-White Thinking, Overgeneralization, Personalization).
+2. Explain briefly why this distortion applies.
+3. Provide 3 alternative, balanced reframes for the thought.
+Be empathetic, professional, concise, and use Markdown formatting.`;
+
+  const messages = buildMessages(systemPrompt, [], thought);
+  let rawText = await tryHuggingFaceDirect(messages);
+
+  if (!rawText) {
+    rawText = await tryProxy(messages);
+  }
+
+  return rawText;
+};
+
+export const extractJournalThemes = async (journalText: string): Promise<string | null> => {
+  const systemPrompt = `You are an AI wellness assistant extracting high-level themes from a student's private journal entry.
+The student has just vented their thoughts. They are looking for objective, anonymous patterns, not a conversation.
+Your task:
+1. Identify exactly 3 core themes or active stressors in the text (e.g., "Academic Pressure", "Social Isolation").
+2. For each theme, provide a 1-sentence supportive and highly specific observation.
+3. Suggest 1 actionable coping mechanism at the end.
+Do not quote the user's sensitive text directly. Be explicit that this text was discarded. Be concise and use Markdown formatting.`;
+
+  const messages = buildMessages(systemPrompt, [], journalText);
+  let rawText = await tryHuggingFaceDirect(messages);
+
+  if (!rawText) {
+    rawText = await tryProxy(messages);
+  }
+
+  return rawText;
 };

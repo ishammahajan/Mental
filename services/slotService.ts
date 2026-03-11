@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { AppointmentSlot } from '../types';
+import { analyzeMentalHealthText } from './mentalHealthSentimentService';
 
 const SLOTS_COL = 'slots';
 
@@ -101,14 +102,25 @@ export const createSlot = async (slot: Omit<AppointmentSlot, 'id'>): Promise<str
 export const requestSlot = async (
     slotId: string,
     studentId: string,
-    studentName: string
+    studentName: string,
+    intakeText?: string
 ): Promise<boolean> => {
     try {
+        let priority: 'normal' | 'high' = 'normal';
+
+        if (intakeText && intakeText.trim().length > 0) {
+            const analysis = await analyzeMentalHealthText(intakeText);
+            if (analysis.riskLevel === 'CRITICAL' || analysis.riskLevel === 'HIGH') {
+                priority = 'high';
+            }
+        }
+
         const ref = doc(db, SLOTS_COL, slotId);
         await updateDoc(ref, {
             status: 'requested',
             bookedByStudentId: studentId,
             bookedByStudentName: studentName,
+            priority,
             updatedAt: serverTimestamp(),
         });
         return true;

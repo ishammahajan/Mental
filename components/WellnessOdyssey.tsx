@@ -10,6 +10,7 @@ import WeaversLoom from './games/WeaversLoom';
 import LogicPuzzle from './games/LogicPuzzle';
 import CustomExplorer from './games/CustomExplorer';
 import { getForgedGames, GameMetadata } from '../services/ragService';
+import CognitiveReframer from './CognitiveReframer';
 
 // ─── Survey Data ─────────────────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ const getSeverity = (score: number, max: number, type: 'GAD7' | 'BDI') => {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 interface Props {
-    surveyType: 'GAD7' | 'BDI';
+    surveyType: 'GAD7' | 'BDI' | 'REFRAME';
     userId: string;
     onClose: () => void;
 }
@@ -140,6 +141,10 @@ const atmosphereColors = (healthPct: number) => {
 };
 
 const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
+    if (surveyType === 'REFRAME') {
+        return <CognitiveReframer onBack={onClose} />;
+    }
+
     const questions = surveyType === 'GAD7' ? GAD7_QUESTIONS : BDI_QUESTIONS;
     const maxScore = questions.length * 3;
     const { addNotification } = useNotification();

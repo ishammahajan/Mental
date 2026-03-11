@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import EnvironmentWidget from './EnvironmentWidget';
 import CounselorReportModal from './CounselorReportModal';
-import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, Map, LineChart as ChartIcon, Wand2, Activity, Send, Edit2 } from 'lucide-react';
+import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, Map, LineChart as ChartIcon, Wand2, Activity, Send, Edit2, Bot } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import * as db from '../services/storage';
 import { deleteTask } from '../services/storage';
 import { uploadGamePDF, getForgedGames, GameMetadata } from '../services/ragService';
 import { AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
 import ConsentForm from './ConsentForm';
+import CounselorCopilot from './CounselorCopilot';
 import { useNotification } from '../contexts/NotificationContext';
 import { useStorageSync } from '../hooks/useStorageSync';
 import { signOut } from '../services/authService';
@@ -104,7 +105,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [studentForConsent, setStudentForConsent] = useState<User | null>(null);
 
   // Posts (Wellness Wall) State
-  const [activePanel, setActivePanel] = useState<'requests' | 'manageSlots' | 'posts' | 'questForge'>('requests');
+  const [activePanel, setActivePanel] = useState<'requests' | 'manageSlots' | 'posts' | 'questForge' | 'copilot'>('requests');
   const [posts, setPosts] = useState<WellnessPost[]>([]);
   const [postTitle, setPostTitle] = useState('');
   const [postBody, setPostBody] = useState('');
@@ -119,7 +120,6 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [isForging, setIsForging] = useState(false);
   const [forgedGames, setForgedGames] = useState<Record<string, GameMetadata>>({});
 
-  // Edit Slot state
   const [editSlot, setEditSlot] = useState<AppointmentSlot | null>(null);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
@@ -525,22 +525,52 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
             <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs font-bold">Live</span>
           </div>
           <div className="overflow-y-auto flex-1 p-2 space-y-2">
-            {students.map((student) => (
-              <div key={student.id} onClick={() => setSelectedStudent(student.casefileId || student.id)}
-                className={`p - 4 rounded - lg border cursor - pointer transition - colors group ${selectedStudent === (student.casefileId || student.id) ? 'border-[#8A9A5B] ring-1 ring-[#8A9A5B]' : 'bg-white border-gray-100'} `}>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="font-mono text-xs text-slate-500">{student.casefileId}</span>
-                  <AlertTriangle size={14} className="text-red-500" />
-                </div>
-                <div className="flex justify-between items-end">
-                  <div>
-                    <div className="text-sm font-medium text-slate-700">{student.name}</div>
-                    <div className={`text - xl font - bold text - slate - 700`}>{student.program}</div>
+            {students.map((student) => {
+              const studentId = student.casefileId || student.id;
+
+              // Calculate days since last session
+              let daysSinceLastSession: number | null = null;
+              const myPastSlots = slots
+                .filter(s => s.bookedByStudentId === studentId && s.status === 'confirmed')
+                .map(s => {
+                  const dateObj = new Date(`${s.date} ${s.time.replace(/AM|PM/i, '').trim()}`);
+                  return isNaN(dateObj.getTime()) ? new Date(s.date) : dateObj;
+                })
+                .filter(d => !isNaN(d.getTime()) && d < new Date())
+                .sort((a, b) => b.getTime() - a.getTime());
+
+              if (myPastSlots.length > 0) {
+                daysSinceLastSession = Math.floor((Date.now() - myPastSlots[0].getTime()) / (1000 * 60 * 60 * 24));
+              }
+
+              const isInactive = daysSinceLastSession !== null && daysSinceLastSession >= 15;
+
+              return (
+                <div key={student.id} onClick={() => setSelectedStudent(studentId)}
+                  className={`p-4 rounded-lg border cursor-pointer transition-colors group ${selectedStudent === studentId ? 'border-[#8A9A5B] ring-1 ring-[#8A9A5B]' : 'bg-white border-gray-100'} `}>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-mono text-xs text-slate-500">{student.casefileId}</span>
+                    {isInactive ? (
+                      <span className="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px] flex items-center gap-1"><AlertTriangle size={10} /> {daysSinceLastSession} Days Inactive</span>
+                    ) : (
+                      <AlertTriangle size={14} className="text-red-500" />
+                    )}
                   </div>
-                  <div className="text-right"><div className="text-xs text-slate-400">Last Active</div><div className="text-xs font-medium text-slate-600">-</div></div>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <div className="text-sm font-medium text-slate-700">{student.name}</div>
+                      <div className={`text-xs font-bold text-slate-500 mt-0.5`}>{student.program}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-slate-400">Last Active</div>
+                      <div className="text-xs font-medium text-slate-600">
+                        {myPastSlots.length > 0 ? myPastSlots[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
@@ -653,7 +683,20 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
             >
               <Wand2 size={14} /> Forge
             </button>
+            <button
+              onClick={() => setActivePanel('copilot')}
+              className={`py-3 text-sm font-bold flex items-center justify-center gap-1.5 px-4 transition-colors ${activePanel === 'copilot' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <Bot size={14} /> Copilot
+            </button>
           </div>
+
+          {/* ── COPILOT PANEL ─────────────────────────────────────────────── */}
+          {activePanel === 'copilot' && (
+            <div className="flex-1 overflow-hidden">
+              <CounselorCopilot counselorName="Dimple Wagle" />
+            </div>
+          )}
 
           {/* ── REQUESTS PANEL ─────────────────────────────────────────────── */}
           {activePanel === 'requests' && (
@@ -664,38 +707,47 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                   <p className="font-bold text-slate-500 mb-1">All caught up!</p>
                   <p className="text-xs text-center px-4">You have no pending session requests to approve.</p>
                 </div>
-              ) : slots.filter(s => s.status === 'requested').map(slot => (
-                <div key={slot.id} className="bg-white rounded-xl border border-amber-200 shadow-sm p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
-                        <Bell size={18} />
+              ) : slots.filter(s => s.status === 'requested')
+                .sort((a, b) => (a.priority === 'high' ? -1 : 1) - (b.priority === 'high' ? -1 : 1))
+                .map(slot => (
+                  <div key={slot.id} className={`bg-white rounded-xl border ${slot.priority === 'high' ? 'border-red-300 ring-1 ring-red-100' : 'border-amber-200'} shadow-sm p-4 hover:shadow-md transition-shadow`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${slot.priority === 'high' ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-amber-100 text-amber-600'}`}>
+                          {slot.priority === 'high' ? <Zap size={18} /> : <Bell size={18} />}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            {slot.bookedByStudentName || 'Unknown Student'}
+                            {slot.priority === 'high' && (
+                              <span className="bg-red-100 text-red-700 text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wider font-black flex items-center gap-0.5">
+                                High Priority
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-0.5">{slot.date} at {slot.time}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-slate-700 text-sm">{slot.bookedByStudentName || 'Unknown Student'}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">{slot.date} at {slot.time}</p>
-                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded border uppercase tracking-widest ${slot.priority === 'high' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                        Needs Approval
+                      </span>
                     </div>
-                    <span className="bg-amber-50 text-amber-600 text-[10px] font-bold px-2 py-1 rounded border border-amber-100 uppercase tracking-widest">
-                      Needs Approval
-                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSlotAction(slot, 'confirm')}
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                      >
+                        <CheckCircle size={14} /> Approve Session
+                      </button>
+                      <button
+                        onClick={() => handleSlotAction(slot, 'reject')}
+                        className="flex-1 bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <X size={14} /> Decline
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSlotAction(slot, 'confirm')}
-                      className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle size={14} /> Approve Session
-                    </button>
-                    <button
-                      onClick={() => handleSlotAction(slot, 'reject')}
-                      className="flex-1 bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <X size={14} /> Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
 
@@ -793,14 +845,52 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                     </h3>
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs text-slate-500 font-bold mb-1 uppercase tracking-wide">Date (e.g. Mon, Mar 3)</label>
-                        <input
-                          type="text"
-                          value={editDate}
-                          onChange={e => setEditDate(e.target.value)}
-                          className="w-full border border-gray-200 rounded-xl p-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#8A9A5B]/40 bg-gray-50"
-                          placeholder="Mon, Mar 3"
-                        />
+                        <label className="block text-xs text-slate-500 font-bold mb-1 uppercase tracking-wide">Date</label>
+                        <div className="border border-gray-200 rounded-xl overflow-hidden">
+                          {/* Calendar Header */}
+                          <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200">
+                            <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-white rounded-md transition-colors"><ChevronLeft size={16} /></button>
+                            <span className="font-bold text-sm text-slate-700">
+                              {pickerDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                            </span>
+                            <button onClick={() => changeMonth(1)} className="p-1 hover:bg-white rounded-md transition-colors"><ChevronRight size={16} /></button>
+                          </div>
+                          {/* Calendar Grid */}
+                          <div className="p-3">
+                            <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                                <div key={day} className="text-[10px] font-bold text-slate-400">{day}</div>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-7 gap-1">
+                              {/* Empty slots for first week */}
+                              {Array(getDaysInMonth(pickerDate).firstDay).fill(null).map((_, i) => (
+                                <div key={`empty-${i}`} className="p-2" />
+                              ))}
+                              {/* Actual days */}
+                              {Array.from({ length: getDaysInMonth(pickerDate).days }, (_, i) => i + 1).map((day) => {
+                                const dateStr = `${pickerDate.toLocaleString('default', { month: 'short' })} ${day}, ${pickerDate.getFullYear()}`;
+                                const newDateStr = new Date(pickerDate.getFullYear(), pickerDate.getMonth(), day)
+                                  .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+                                const isSelected = editDate === newDateStr;
+
+                                return (
+                                  <button
+                                    key={day}
+                                    onClick={() => setEditDate(newDateStr)}
+                                    className={`p-2 w-full text-xs rounded-lg transition-all ${isSelected
+                                      ? 'bg-[#8A9A5B] text-white font-bold shadow-sm'
+                                      : 'hover:bg-gray-100 text-slate-700'
+                                      }`}
+                                  >
+                                    {day}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs text-slate-500 font-bold mb-1 uppercase tracking-wide">Time (e.g. 5:00 PM)</label>
@@ -815,7 +905,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                     </div>
                     <div className="flex gap-2 mt-6">
                       <button
-                        onClick={() => setEditSlot(null)}
+                        onClick={() => { setEditSlot(null); setPickerDate(new Date()); }}
                         className="flex-1 border border-gray-200 text-slate-600 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors"
                       >Cancel</button>
                       <button
