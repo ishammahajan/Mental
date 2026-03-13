@@ -243,7 +243,22 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       setQuestFile(null);
       addNotification('Quest Forged Successfully! RAG embeddings stored.', 'success');
     } catch (e) {
-      addNotification('Failed to forge quest. Ensure backend is running.', 'error');
+      console.warn("Forge backend unavailable, falling back to local mock.", e);
+      // OFFLINE FALLBACK FOR DEMO / LOCAL TESTING
+      const mockGameId = 'game_mock_' + Date.now();
+      setForgedGames(prev => ({
+        ...prev,
+        [mockGameId]: {
+          id: mockGameId,
+          title: questTitle,
+          paradigm: questParadigm,
+          fileRef: questFile.name,
+          createdAt: new Date().toISOString()
+        }
+      }));
+      setQuestTitle('');
+      setQuestFile(null);
+      addNotification(`Offline Mock: Quest '${questTitle}' stored virtually!`, 'success');
     }
     setIsForging(false);
   };
@@ -354,6 +369,23 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const handlePublishSlot = async () => {
     if (!selectedTime) return;
 
+    // VALIDATION: Prevent past time/date booking
+    const parsedDate = new Date(pickerDate);
+    const timeParts = selectedTime.match(/(\d+):(\d+)\s+(AM|PM)/i);
+    if (timeParts) {
+      let hours = parseInt(timeParts[1], 10);
+      const mins = parseInt(timeParts[2], 10);
+      const ampm = timeParts[3].toUpperCase();
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+      parsedDate.setHours(hours, mins, 0, 0);
+    }
+
+    if (parsedDate < new Date()) {
+      addNotification('Cannot schedule a slot in the past.', 'error');
+      return;
+    }
+
     const dateStr = pickerDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
     await createSlot({
@@ -421,8 +453,8 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   for (let i = 9; i <= 18; i++) { // 9 AM to 6 PM
     const h = i > 12 ? i - 12 : i;
     const ampm = i >= 12 ? 'PM' : 'AM';
-    timeSlots.push(`${h}:00 ${ampm} `);
-    timeSlots.push(`${h}: 30 ${ampm} `);
+    timeSlots.push(`${h}:00 ${ampm}`);
+    timeSlots.push(`${h}:30 ${ampm}`);
   }
 
   return (
@@ -655,48 +687,39 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
         {/* RIGHT: Slot Publisher + Posts */}
         <div className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          {/* Tab strip */}
-          <div className="flex border-b border-gray-100">
+          {/* ── TOP NAV PILLS ─────────────────────────────────────────────── */}
+          <div className="flex gap-2 p-2 bg-slate-100/50 rounded-xl mb-6 overflow-x-auto scrollbar-hide items-center shadow-inner border border-slate-200/60 transition-all">
             <button
               onClick={() => setActivePanel('requests')}
-              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'requests' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`py-2 text-sm flex items-center justify-center gap-2 px-6 rounded-lg transition-all whitespace-nowrap ${activePanel === 'requests' ? 'bg-white text-slate-800 shadow-sm font-bold ring-1 ring-slate-200/50' : 'text-slate-500 hover:bg-white/40 hover:text-slate-700'}`}
             >
-              <Bell size={14} /> Requests
-              {slots.filter(s => s.status === 'requested').length > 0 && <span className="bg-amber-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full">{slots.filter(s => s.status === 'requested').length}</span>}
+              <div className="relative">
+                <Bell size={16} />
+                {slots.filter(s => s.status === 'requested').length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse border border-white"></span>
+                )}
+              </div>
+              Requests {slots.filter(s => s.status === 'requested').length > 0 && `(${slots.filter(s => s.status === 'requested').length})`}
             </button>
             <button
               onClick={() => setActivePanel('manageSlots')}
-              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'manageSlots' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`py-2 text-sm flex items-center justify-center gap-2 px-6 rounded-lg transition-all whitespace-nowrap ${activePanel === 'manageSlots' ? 'bg-white text-slate-800 shadow-sm font-bold ring-1 ring-slate-200/50' : 'text-slate-500 hover:bg-white/40 hover:text-slate-700'}`}
             >
-              <CalendarIcon size={14} /> Manage Slots
+              <CalendarIcon size={16} /> Schedule
             </button>
             <button
               onClick={() => setActivePanel('posts')}
-              className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${activePanel === 'posts' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`py-2 text-sm flex items-center justify-center gap-2 px-6 rounded-lg transition-all whitespace-nowrap ${activePanel === 'posts' ? 'bg-white text-slate-800 shadow-sm font-bold ring-1 ring-slate-200/50' : 'text-slate-500 hover:bg-white/40 hover:text-slate-700'}`}
             >
-              <Newspaper size={14} /> Posts
-              {posts.length > 0 && <span className="bg-[#8A9A5B] text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full">{posts.length}</span>}
+              <Newspaper size={16} /> Wall Posts
             </button>
             <button
               onClick={() => setActivePanel('questForge')}
-              className={`py-3 text-sm font-bold flex items-center justify-center gap-1.5 px-4 transition-colors ${activePanel === 'questForge' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`py-2 text-sm flex items-center justify-center gap-2 px-6 rounded-lg transition-all whitespace-nowrap ${activePanel === 'questForge' ? 'bg-white text-slate-800 shadow-sm font-bold ring-1 ring-slate-200/50' : 'text-slate-500 hover:bg-white/40 hover:text-slate-700'}`}
             >
-              <Wand2 size={14} /> Forge
-            </button>
-            <button
-              onClick={() => setActivePanel('copilot')}
-              className={`py-3 text-sm font-bold flex items-center justify-center gap-1.5 px-4 transition-colors ${activePanel === 'copilot' ? 'text-[#8A9A5B] border-b-2 border-[#8A9A5B]' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <Bot size={14} /> Copilot
+              <Wand2 size={16} /> Quest Forge
             </button>
           </div>
-
-          {/* ── COPILOT PANEL ─────────────────────────────────────────────── */}
-          {activePanel === 'copilot' && (
-            <div className="flex-1 overflow-hidden">
-              <CounselorCopilot counselorName="Dimple Wagle" />
-            </div>
-          )}
 
           {/* ── REQUESTS PANEL ─────────────────────────────────────────────── */}
           {activePanel === 'requests' && (
@@ -1176,15 +1199,15 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                 </div>
               </div>
 
-              {/* Time Picker (Scrollable Roll) */}
+              {/* Time Picker (Structured Grid) */}
               <div>
-                <h4 className="font-bold text-slate-700 mb-2 flex items-center gap-2"><Clock size={14} /> Select Time</h4>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Clock size={16} className="text-[#8A9A5B]" /> Select Time</h4>
+                <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1 pb-2 scrollbar-hide">
                   {timeSlots.map(t => (
                     <button
                       key={t}
                       onClick={() => setSelectedTime(t)}
-                      className={`flex - shrink - 0 px - 4 py - 2 rounded - lg border text - sm font - medium transition - all ${selectedTime === t ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white border-gray-200 text-slate-600 hover:border-[#8A9A5B]'} `}
+                      className={`px-2 py-2.5 rounded-xl border text-xs font-bold transition-all ${selectedTime === t ? 'bg-[#8A9A5B] text-white border-[#8A9A5B] shadow-md scale-105 ring-2 ring-[#8A9A5B]/20' : 'bg-gray-50 border-gray-200 text-slate-600 hover:border-[#8A9A5B] hover:bg-white'}`}
                     >
                       {t}
                     </button>
@@ -1216,8 +1239,8 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
             {chatHistory.map(m => (
-              <div key={m.id} className={`flex ${m.senderId === 'counselor_dimple' ? 'justify-end' : 'justify-start'} `}>
-                <div className={`max - w - [80 %] p - 2 rounded - lg text - sm ${m.senderId === 'counselor_dimple' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200'} `}>
+              <div key={m.id} className={`flex ${m.senderId === 'counselor_dimple' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.senderId === 'counselor_dimple' ? 'bg-[#8A9A5B] text-white shadow-sm' : 'bg-white border border-gray-200 text-slate-700 shadow-sm'}`}>
                   {m.text}
                 </div>
               </div>

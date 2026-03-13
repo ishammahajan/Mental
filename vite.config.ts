@@ -14,17 +14,32 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['vite.svg'],
+        includeAssets: ['favicon.png', 'icon-192.png', 'icon-512.png', 'vite.svg'],
         manifest: {
           name: 'SPeakUp | SPJIMR',
           short_name: 'SPeakUp',
           description: 'A privacy-first mental health ecosystem for SPJIMR, featuring SParsh AI.',
           theme_color: '#E6DDD0',
+          background_color: '#E6DDD0',
+          display: 'standalone',
+          orientation: 'portrait',
+          scope: '/',
+          start_url: '/',
           icons: [
             {
-              src: 'vite.svg',
+              src: 'icon-192.png',
+              sizes: '192x192',
+              type: 'image/png'
+            },
+            {
+              src: 'icon-512.png',
               sizes: '512x512',
-              type: 'image/svg+xml',
+              type: 'image/png'
+            },
+            {
+              src: 'icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
               purpose: 'any maskable'
             }
           ]
