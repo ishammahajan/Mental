@@ -461,12 +461,17 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     <div className="min-h-screen bg-gray-50 text-slate-800 font-sans flex flex-col relative">
 
       {/* Top Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-sm z-10">
-        <div className="flex items-center gap-4">
-          <div className="bg-[#8A9A5B] p-2 rounded-lg"><Activity className="text-white" size={24} /></div>
-          <div><h1 className="text-xl font-bold text-slate-800">SPeakUp <span className="text-slate-400 font-normal">| Command Center</span></h1></div>
+      <header className="bg-white border-b border-gray-200 px-4 md:px-8 py-3 md:py-4 flex flex-col sm:flex-row justify-between items-center shadow-sm z-10 gap-3">
+        <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto justify-between sm:justify-start">
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="bg-[#8A9A5B] p-2 rounded-lg flex-shrink-0"><Activity className="text-white" size={20} md:size={24} /></div>
+            <div><h1 className="text-base md:text-xl font-bold text-slate-800">SPeakUp <span className="hidden xs:inline text-slate-400 font-normal">| Command Center</span></h1></div>
+          </div>
+          <div className="flex items-center gap-2 md:hidden">
+            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">DW</div>
+          </div>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3 md:gap-6 w-full sm:w-auto justify-around sm:justify-end">
           {/* Inbox Alert */}
           <div className="relative">
             <button onClick={() => setShowInboxModal(true)} title="Messages" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -609,9 +614,9 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
         {/* CENTER: Case File */}
         <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">
+                <h2 className="text-base md:text-lg font-bold text-slate-800">
                   Case File: {selectedStudent ? (
                     (() => {
                       const s = students.find(st => (st.casefileId || st.id) === selectedStudent);
@@ -619,12 +624,11 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                     })()
                   ) : 'Select a student'}
                 </h2>
-                <p className="text-sm text-slate-500">{selectedStudent ? 'MBA Year 1 • High Workload detected' : 'Click a student on the left to view details'}</p>
+                <p className="text-xs md:text-sm text-slate-500">{selectedStudent ? 'MBA Year 1 • High Workload detected' : 'Click a student on the left to view details'}</p>
               </div>
-              <div className="flex gap-2">
-
-                <button onClick={() => setShowTaskModal(true)} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 transition-colors">
-                  <ClipboardList size={14} /> Assign Task
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <button onClick={() => setShowTaskModal(true)} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 transition-colors">
+                  <ClipboardList size={14} /> <span className="hidden xs:inline">Assign Task</span><span className="xs:hidden">Task</span>
                 </button>
                 <button onClick={async () => {
                   setShowChatModal(true);
@@ -632,11 +636,11 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                     await db.markThreadAsRead('counselor_dimple', selectedStudent);
                     setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
                   }
-                }} disabled={!selectedStudent} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#8A9A5B] text-white rounded-md hover:bg-[#728248] shadow-sm transition-colors disabled:opacity-50">
-                  <MessageSquare size={14} /> Chat
+                }} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-[#8A9A5B] text-white rounded-md hover:bg-[#728248] shadow-sm transition-colors disabled:opacity-50">
+                  <MessageSquare size={14} /> <span className="hidden xs:inline">Chat</span><span className="xs:hidden">Chat</span>
                 </button>
-                <button onClick={handleSendFollowUpNudge} disabled={!selectedStudent} title="Send a gentle follow-up notification to this student" className="flex items-center gap-2 px-3 py-1.5 text-sm bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors">
-                  <Bell size={14} /> Follow-Up Nudge
+                <button onClick={handleSendFollowUpNudge} disabled={!selectedStudent} title="Send a gentle follow-up notification to this student" className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors">
+                  <Bell size={14} /> <span className="hidden xs:inline">Follow-Up Nudge</span><span className="xs:hidden">Nudge</span>
                 </button>
               </div>
             </div>

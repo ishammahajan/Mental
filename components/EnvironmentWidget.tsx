@@ -78,13 +78,13 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
   // Counselor Variant (Slim Header Bar)
   if (variant === 'counselor') {
     return (
-      <div className="bg-white border-b border-gray-200 px-8 py-2 flex justify-between items-center text-xs text-slate-500">
-        <div className="flex gap-4 items-center">
+      <div className="bg-white border-b border-gray-200 px-4 md:px-8 py-2 flex justify-between items-center text-[10px] md:text-xs text-slate-500 gap-2">
+        <div className="flex gap-2 md:gap-4 items-center overflow-x-auto no-scrollbar whitespace-nowrap">
           {loading ? (
-            <span className="flex items-center gap-1 animate-pulse"><Loader size={12} className="animate-spin" /> Fetching location...</span>
+            <span className="flex items-center gap-1 animate-pulse"><Loader size={12} className="animate-spin" /> <span className="hidden xs:inline">Fetching location...</span><span className="xs:hidden">Locating...</span></span>
           ) : error ? (
             <span className="flex items-center gap-2 text-orange-500">
-              <MapPin size={12} /> {denied ? 'Location blocked — ' : ''}{error}
+              <MapPin size={12} /> <span className="hidden sm:inline">{denied ? 'Location blocked — ' : ''}{error}</span>
               <button onClick={fetchEnvData} className="flex items-center gap-1 text-blue-500 hover:text-blue-700 underline">
                 <RefreshCw size={10} /> Retry
               </button>
@@ -94,20 +94,20 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
               <span className="flex items-center gap-1"><MapPin size={12} /> {data.location}</span>
               <span className="flex items-center gap-1"><Sun size={12} /> {data.temp}°C</span>
               <WeatherIcon condition={data.condition} size={12} />
-              <span className={`font-bold ${AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.color || ''}`}>
+              <span className={`font-bold hidden xs:inline ${AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.color || ''}`}>
                 AQI: {AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.label}
               </span>
             </>
           ) : null}
         </div>
-        <div className="italic">{suggestion}</div>
+        <div className="italic truncate max-w-[40%] text-right">{suggestion}</div>
       </div>
     );
   }
 
   // Student Variant (Neumorphic Card)
   return (
-    <div className="neu-flat p-4 rounded-2xl mb-6 flex items-center justify-between min-h-[100px]">
+    <div className="neu-flat p-4 rounded-2xl mb-6 flex items-center justify-between min-h-[100px] gap-4">
       {loading && (
         <div className="flex items-center justify-center gap-2 w-full text-sm text-slate-400">
           <Loader size={16} className="animate-spin" /> Loading local vibe...
@@ -123,18 +123,18 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
       )}
       {data && !loading && !error && (
         <>
-          <div>
-            <div className="text-xs text-[#708090]/60 uppercase tracking-wider mb-1">{data.location}</div>
+          <div className="flex-shrink-0">
+            <div className="text-[10px] text-[#708090]/60 uppercase tracking-wider mb-1 truncate max-w-[100px]">{data.location}</div>
             <div className="flex items-center gap-2">
               <WeatherIcon condition={data.condition} />
-              <span className="text-2xl font-bold text-[#708090]">{data.temp}°C</span>
+              <span className="text-xl md:text-2xl font-bold text-[#708090]">{data.temp}°C</span>
             </div>
-            <div className={`text-xs mt-1 ${AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.color || 'text-[#CC5500]'}`}>
+            <div className={`text-[10px] md:text-xs mt-1 ${AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.color || 'text-[#CC5500]'}`}>
               AQI • {AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.label || 'Unknown'}
             </div>
           </div>
-          <div className="text-right max-w-[55%]">
-            <p className="text-sm font-bold text-[#8A9A5B] leading-snug">{suggestion}</p>
+          <div className="text-right flex-1 flex items-center justify-end">
+            <p className="text-xs md:text-sm font-bold text-[#8A9A5B] leading-tight md:leading-snug">{suggestion}</p>
           </div>
         </>
       )}

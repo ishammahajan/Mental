@@ -605,15 +605,15 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     <div className="min-h-screen flex flex-col bg-[#E6DDD0]">
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="w-full bg-[#DCD4C4] p-4 flex justify-between items-center shadow-md z-20">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-[#8A9A5B] flex items-center justify-center text-white font-bold text-xl">SU</div>
-          <div>
-            <h1 className="font-bold text-lg text-[#708090]">SpeakUp</h1>
-            <p className="text-sm text-slate-500">Hi, {studentName}</p>
+      <div className="w-full bg-[#DCD4C4] p-3 md:p-4 flex justify-between items-center shadow-md z-20">
+        <div className="flex items-center gap-2 md:gap-4">
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#8A9A5B] flex items-center justify-center text-white font-bold text-lg md:text-xl flex-shrink-0">SU</div>
+          <div className="min-w-0">
+            <h1 className="font-bold text-base md:text-lg text-[#708090] truncate">SpeakUp</h1>
+            <p className="text-[10px] md:text-sm text-slate-500 truncate">Hi, {studentName}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 md:gap-3">
           <div className="relative">
             <button onClick={async () => {
               setShowP2P(true);
@@ -901,9 +901,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 </div>
 
                 {/* Bottom Row: Tasks (Left) + Workload Meter (Right) Tiles */}
-                <div className="flex-none grid grid-cols-2 gap-4 min-h-[160px]">
+                <div className="flex-none grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Tasks Column - Standard Gradient Tile */}
-                  <button onClick={() => setActiveTab('tasks')} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full">
+                  <button onClick={() => setActiveTab('tasks')} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left min-h-[160px]">
                     <CheckSquare size={32} className="mb-3 opacity-90" />
                     <h3 className="font-bold text-lg md:text-xl text-center mb-1">Wellness Quests</h3>
                     <p className="text-xs md:text-sm opacity-80 text-center">{tasks.filter(t => t.assignedBy !== 'system').length} Active Tasks · Tap</p>
@@ -1109,10 +1109,10 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                         isOpen ? 'neu-flat border-transparent' :
                           'bg-gray-50 border-gray-200 opacity-60'
                       }`}>
-                      <div className="flex justify-between items-start gap-3">
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                         <div className="flex-1">
-                          <div className="font-bold text-[#708090]">{slot.counselorName}</div>
-                          <div className="text-sm text-slate-400 mt-0.5">{slot.date} · {slot.time}</div>
+                          <div className="font-bold text-[#708090] text-sm md:text-base">{slot.counselorName}</div>
+                          <div className="text-[11px] md:text-sm text-slate-400 mt-0.5">{slot.date} · {slot.time}</div>
                           {/* Status badge */}
                           <div className="mt-2">
                             {isMyBooking && isConfirmed && (
