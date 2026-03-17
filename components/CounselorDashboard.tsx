@@ -5,6 +5,7 @@ import CounselorReportModal from './CounselorReportModal';
 import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, Map, LineChart as ChartIcon, Wand2, Activity, Send, Edit2, Bot } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import * as db from '../services/storage';
+import * as chat from '../services/chatService';
 import { deleteTask } from '../services/storage';
 import { uploadGamePDF, getForgedGames, GameMetadata } from '../services/ragService';
 import { AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
@@ -22,6 +23,7 @@ import {
   deleteSlot as deleteSlotFromFirestore,
   subscribeToSlots,
 } from '../services/slotService';
+import { COUNSELORS } from '../constants';
 import { collection, getDocs } from 'firebase/firestore';
 import { db as firestoreDb } from '../services/firebaseConfig';
 
@@ -71,6 +73,7 @@ const downloadConsentAsPDF = async (slotId: string) => {
 interface CounselorProps { onLogout?: () => void; }
 
 const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
+  const counselorId = COUNSELORS[0].email || COUNSELORS[0].id;
   const { addNotification, storedNotifications, unreadCount: contextUnreadCount, markAllRead, clearAll, clearOne } = useNotification();
   const [showBellDropdown, setShowBellDropdown] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
@@ -153,12 +156,12 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       setStudentTasks(await db.getCounselorAssignedTasks());
     }
     if (changedKey.startsWith('speakup_cloud_p2p')) {
-      const convos = await db.getCounselorConversations('counselor_dimple');
+      const convos = await chat.getCounselorConversations(counselorId);
       setConversations(convos);
       setTotalUnread(convos.reduce((acc, c) => acc + c.unreadCount, 0));
       // Instantly refresh the active P2P chat window
       if (selectedStudent) {
-        setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
+        setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
       }
     }
   });
@@ -167,15 +170,15 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   useEffect(() => {
     const fetchUpdates = async () => {
       // Fetch Inbox Data
-      const convos = await db.getCounselorConversations('counselor_dimple');
+      const convos = await chat.getCounselorConversations(counselorId);
       setConversations(convos);
       const unread = convos.reduce((acc, curr) => acc + curr.unreadCount, 0);
       setTotalUnread(unread);
 
       // Fetch active chat details if open
       if (showChatModal && selectedStudent) {
-        await db.markThreadAsRead('counselor_dimple', selectedStudent);
-        setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
+        await chat.markThreadAsRead(counselorId, selectedStudent);
+        setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
       }
     };
 
@@ -199,7 +202,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     };
     init();
     return () => clearInterval(interval);
-  }, [showChatModal, selectedStudent]);
+  }, [showChatModal, selectedStudent, counselorId]);
 
   const handleCreatePost = async () => {
     if (!postTitle.trim() || !postBody.trim()) return;
@@ -410,28 +413,28 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !selectedStudent) return;
-    await db.sendP2PMessage({
+    await chat.sendP2PMessage({
       id: Date.now().toString(),
-      senderId: 'counselor_dimple',
+      senderId: counselorId,
       receiverId: selectedStudent,
       text: chatInput,
       timestamp: new Date().toISOString(),
       isRead: false
     });
     setChatInput('');
-    setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
+    setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
   };
 
   const openChatFromInbox = async (studentId: string) => {
     setSelectedStudent(studentId);
     const convo = conversations.find(c => c.studentId === studentId);
     if (convo) {
-      await db.markThreadAsRead('counselor_dimple', convo.studentId);
-      setChatHistory(await db.getP2PThread('counselor_dimple', convo.studentId));
+      await chat.markThreadAsRead(counselorId, convo.studentId);
+      setChatHistory(await chat.getP2PThread(counselorId, convo.studentId));
     }
     setShowInboxModal(false);
     setShowChatModal(true);
-    setChatHistory(await db.getP2PThread('counselor_dimple', studentId));
+    setChatHistory(await chat.getP2PThread(counselorId, studentId));
   };
 
   // Calendar Helpers
@@ -633,8 +636,8 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                 <button onClick={async () => {
                   setShowChatModal(true);
                   if (selectedStudent) {
-                    await db.markThreadAsRead('counselor_dimple', selectedStudent);
-                    setChatHistory(await db.getP2PThread('counselor_dimple', selectedStudent));
+                    await chat.markThreadAsRead(counselorId, selectedStudent);
+                    setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
                   }
                 }} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-[#8A9A5B] text-white rounded-md hover:bg-[#728248] shadow-sm transition-colors disabled:opacity-50">
                   <MessageSquare size={14} /> <span className="hidden xs:inline">Chat</span><span className="xs:hidden">Chat</span>
@@ -1243,8 +1246,8 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
             {chatHistory.map(m => (
-              <div key={m.id} className={`flex ${m.senderId === 'counselor_dimple' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.senderId === 'counselor_dimple' ? 'bg-[#8A9A5B] text-white shadow-sm' : 'bg-white border border-gray-200 text-slate-700 shadow-sm'}`}>
+              <div key={m.id} className={`flex ${m.senderId === counselorId ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.senderId === counselorId ? 'bg-[#8A9A5B] text-white shadow-sm' : 'bg-white border border-gray-200 text-slate-700 shadow-sm'}`}>
                   {m.text}
                 </div>
               </div>

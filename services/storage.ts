@@ -153,7 +153,7 @@ export const getCounselorConversations = async (counselorId: string) => {
   });
 };
 
-export const markThreadAsRead = async (receiverId: string, senderId: string) => {
+export const markThreadAsRead = async (receiverId: string, senderId: string): Promise<void> => {
   const allMsgs = cloudGet<P2PMessage[]>(CLOUD_KEYS.P2P_MSGS, []);
   let changed = false;
   const updated = allMsgs.map(m => {
@@ -163,8 +163,21 @@ export const markThreadAsRead = async (receiverId: string, senderId: string) => 
     }
     return m;
   });
-  if (changed) cloudSet(CLOUD_KEYS.P2P_MSGS, updated);
-}
+  if (changed) {
+    cloudSet(CLOUD_KEYS.P2P_MSGS, updated);
+    // Broadcast sync event to other tabs via existing syncChannel
+    try {
+      syncChannel?.postMessage({
+        type: 'P2P_THREAD_MARKED_READ',
+        receiverId,
+        senderId,
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      // Broadcast might not be available, silently fail
+    }
+  }
+};
 
 export const getUnreadP2PCount = async (userId: string): Promise<number> => {
   const allMsgs = cloudGet<P2PMessage[]>(CLOUD_KEYS.P2P_MSGS, []);

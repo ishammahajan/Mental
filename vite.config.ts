@@ -1,4 +1,4 @@
-import path from 'path';
+import * as path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -46,6 +46,11 @@ export default defineConfig(({ mode }) => {
         }
       })
     ],
+    test: {
+      environment: 'jsdom',
+      setupFiles: './tests/setup.ts',
+      globals: true,
+    },
 
     resolve: {
       alias: {

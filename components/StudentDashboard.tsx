@@ -13,6 +13,7 @@ import { analyzeSentimentAndSchedule } from '../services/sentimentAgent';
 import { Message, WellnessTask, AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
 import ConsentForm from './ConsentForm';
 import * as db from '../services/storage';
+import * as chat from '../services/chatService';
 import { useSParsh } from '../contexts/SParshContext';
 import { useNotification } from '../contexts/NotificationContext';
 import OnboardingTour from './OnboardingTour';
@@ -221,7 +222,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   const [recommendedToolkits, setRecommendedToolkits] = useState<any[]>([]);
 
   // Two-counselor selector
-  const [selectedCounselor, setSelectedCounselor] = useState<typeof COUNSELORS[0] | null>(null);
+  const [selectedCounselor, setSelectedCounselor] = useState<typeof COUNSELORS[0] | null>(COUNSELORS[0]);
   const [showCounselorPicker, setShowCounselorPicker] = useState(false);
 
   // Onboarding
@@ -265,11 +266,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     }
     if (changedKey.startsWith('speakup_cloud_p2p')) {
       if (showP2P && selectedCounselor) {
-        setP2PMessages(await db.getP2PThread(userId, selectedCounselor.id));
-        await db.markThreadAsRead(userId, selectedCounselor.id);
+        setP2PMessages(await chat.getP2PThread(userId, selectedCounselor.email || selectedCounselor.id));
+        await chat.markThreadAsRead(userId, selectedCounselor.email || selectedCounselor.id);
         setUnreadP2P(0);
       } else {
-        setUnreadP2P(await db.getUnreadP2PCount(userId));
+        setUnreadP2P(await chat.getUnreadP2PCount(userId));
       }
     }
   });
@@ -294,7 +295,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
         db.getChatHistory(userId),
         db.getTasks(userEmail),
         db.getAllPosts(),
-        db.getUnreadP2PCount(userId),
+        chat.getUnreadP2PCount(userId),
         getForgedGames()
       ]);
       setMessages(history);
@@ -319,15 +320,15 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     const interval = setInterval(async () => {
       setPosts(await db.getAllPosts());
       if (showP2P) {
-        await db.markThreadAsRead(userId, 'counselor_dimple');
+        await chat.markThreadAsRead(userId, selectedCounselor?.email || selectedCounselor?.id || COUNSELORS[0].email);
         setUnreadP2P(0);
-        setP2PMessages(await db.getP2PThread(userId, 'counselor_dimple'));
+        setP2PMessages(await chat.getP2PThread(userId, selectedCounselor?.email || selectedCounselor?.id || COUNSELORS[0].email));
       } else {
-        setUnreadP2P(await db.getUnreadP2PCount(userId));
+        setUnreadP2P(await chat.getUnreadP2PCount(userId));
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [userId, userEmail, showP2P]);
+  }, [userId, userEmail, showP2P, selectedCounselor]);
 
   // ── Real-time Firestore slot subscription (instant cross-device updates)
   useEffect(() => {
@@ -379,10 +380,10 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
   const handleCrisis = async () => {
     triggerCrisis();
-    await db.sendP2PMessage({
+    await chat.sendP2PMessage({
       id: Date.now().toString(),
       senderId: 'system',
-      receiverId: 'counselor_dimple_wagle',
+      receiverId: selectedCounselor?.email || selectedCounselor?.id || COUNSELORS[0].email,
       text: `🚨 EMERGENCY ALERT: ${studentName} (${userEmail}) triggered the SParsh Crisis Protocol. Immediate attention required.`,
       timestamp: new Date().toISOString(),
       isRead: false
@@ -557,24 +558,43 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   const handleP2PSend = async () => {
     if (!p2pInput.trim()) return;
 
+    // Validate counselor selection - CRITICAL for proper message routing
+    if (!selectedCounselor) {
+      addNotification("Please select a counselor first", "warning");
+      return;
+    }
+
+    // Use counselor's email as unique identifier (more reliable than frontend constant ID)
+    const receiverId = selectedCounselor.email || selectedCounselor.id;
+
     // 1. Save message to DB
-    await db.sendP2PMessage({ id: Date.now().toString(), senderId: userId, receiverId: 'counselor_dimple', text: p2pInput, timestamp: new Date().toISOString(), isRead: false });
+    await chat.sendP2PMessage({
+      id: Date.now().toString(),
+      senderId: userId,
+      receiverId: receiverId,
+      text: p2pInput,
+      timestamp: new Date().toISOString(),
+      isRead: false
+    });
 
     // 2. Clear input & Optimistically update UI
     const sentText = p2pInput;
     setP2PInput('');
-    setP2PMessages(await db.getP2PThread(userId, 'counselor_dimple'));
+    
+    // Small delay to allow Firebase/storage to sync
+    await new Promise(resolve => setTimeout(resolve, 100));
+    setP2PMessages(await chat.getP2PThread(userId, receiverId));
 
-    // 3. Background AI Crisis Detection
+    // 3. Background AI Crisis Detection with correct receiver ID
     detectCrisisInText(sentText).then(async (result) => {
       if (result.isCrisis) {
         console.warn('CRISIS DETECTED BY AI:', result.reason);
         triggerCrisis();
-        // Optionally send an automated system message to the counselor alerting them immediately
-        await db.sendP2PMessage({
+        // Send alert to actual counselor email
+        await chat.sendP2PMessage({
           id: Date.now().toString() + '_sys',
           senderId: 'system',
-          receiverId: 'counselor_dimple',
+          receiverId: receiverId,  // Use same ID as regular P2P
           text: `🚨 URGENT AI ALERT: Potential crisis detected for ${studentName}. Reason: ${result.reason}`,
           timestamp: new Date().toISOString(),
           isRead: false
@@ -618,7 +638,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             <button onClick={async () => {
               setShowP2P(true);
               if (selectedCounselor) {
-                await db.markThreadAsRead(userId, selectedCounselor.id);
+                await chat.markThreadAsRead(userId, selectedCounselor.email || selectedCounselor.id);
                 setUnreadP2P(0);
               }
             }} className="neu-icon-btn p-3 rounded-full text-[#708090]">
@@ -1382,7 +1402,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   setSelectedCounselor(c);
                   setShowCounselorPicker(false);
                   setShowP2P(true);
-                  setP2PMessages(await db.getP2PThread(userId, c.id));
+                  setP2PMessages(await chat.getP2PThread(userId, c.id));
                 }}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-[#8A9A5B] hover:bg-[#8A9A5B]/5 transition-all text-left">
                   <div className="w-12 h-12 rounded-full bg-[#8A9A5B] flex items-center justify-center text-white font-bold flex-shrink-0">{c.avatar}</div>

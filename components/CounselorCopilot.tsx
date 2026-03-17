@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, Shield, FileText, BookOpen, AlertTriangle, Loader2 } from 'lucide-react';
 import { sendMessageToSParsh } from '../services/geminiService';
 import MarkdownRenderer from './MarkdownRenderer';
-import { P2PMessage } from '../types';
+import { Message } from '../types';
 import { queryCounselorKnowledge } from '../services/pineconeService';
 
 interface CopilotProps {
@@ -11,14 +11,13 @@ interface CopilotProps {
 
 export default function CounselorCopilot({ counselorName }: CopilotProps) {
     const [input, setInput] = useState('');
-    const [messages, setMessages] = useState<P2PMessage[]>([
+    // Use Message type instead of P2PMessage since this is local assistant state, not user-to-user chat
+    const [messages, setMessages] = useState<Message[]>([
         {
             id: 'init',
-            senderId: 'system',
-            receiverId: 'counselor',
+            role: 'model',
             text: `Hello Dr. ${counselorName.split(' ').pop()}. I'm SParsh Copilot. I have access to SPeakUp logs, SPJIMR institutional policies, and CBT/DBT frameworks. How can I assist you today?`,
-            timestamp: new Date().toISOString(),
-            isRead: true,
+            timestamp: new Date(),
         }
     ]);
     const [isTyping, setIsTyping] = useState(false);
@@ -41,13 +40,11 @@ export default function CounselorCopilot({ counselorName }: CopilotProps) {
     const handleSend = async () => {
         if (!input.trim()) return;
 
-        const userMsg: P2PMessage = {
+        const userMsg: Message = {
             id: Date.now().toString(),
-            senderId: 'counselor',
-            receiverId: 'system',
+            role: 'user',
             text: input.trim(),
-            timestamp: new Date().toISOString(),
-            isRead: true,
+            timestamp: new Date(),
         };
 
         setMessages(prev => [...prev, userMsg]);
@@ -96,25 +93,21 @@ ${userMsg.text}
             );
 
             if (!abortControllerRef.current.signal.aborted) {
-                const aiMsg: P2PMessage = {
+                const aiMsg: Message = {
                     id: (Date.now() + 1).toString(),
-                    senderId: 'system',
-                    receiverId: 'counselor',
+                    role: 'model',
                     text: response.text,
-                    timestamp: new Date().toISOString(),
-                    isRead: true,
+                    timestamp: new Date(),
                 };
                 setMessages(prev => [...prev, aiMsg]);
             }
         } catch (error: any) {
             if (error.name !== 'AbortError') {
-                const errorMsg: P2PMessage = {
+                const errorMsg: Message = {
                     id: (Date.now() + 1).toString(),
-                    senderId: 'system',
-                    receiverId: 'counselor',
+                    role: 'model',
                     text: '⚠️ Copilot encountered an error connecting to the knowledge base. Please check your network or API keys.',
-                    timestamp: new Date().toISOString(),
-                    isRead: true,
+                    timestamp: new Date(),
                 };
                 setMessages(prev => [...prev, errorMsg]);
             }
@@ -148,19 +141,19 @@ ${userMsg.text}
                 </div>
 
                 {messages.map((m) => {
-                    const isSystem = m.senderId === 'system';
+                    const isModel = m.role === 'model';
                     return (
-                        <div key={m.id} className={`flex ${isSystem ? 'justify-start' : 'justify-end'}`}>
-                            <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${isSystem ? 'bg-white border border-gray-200 text-slate-700' : 'bg-indigo-600 text-white'}`}>
-                                {isSystem ? (
+                        <div key={m.id} className={`flex ${isModel ? 'justify-start' : 'justify-end'}`}>
+                            <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${isModel ? 'bg-white border border-gray-200 text-slate-700' : 'bg-indigo-600 text-white'}`}>
+                                {isModel ? (
                                     <div className="text-sm prose prose-sm max-w-none prose-p:leading-relaxed prose-a:text-indigo-600 prose-headings:text-slate-800">
                                         <MarkdownRenderer content={m.text} />
                                     </div>
                                 ) : (
                                     <div className="text-sm">{m.text}</div>
                                 )}
-                                <div className={`text-[10px] mt-2 opacity-60 text-right ${isSystem ? 'text-slate-400' : 'text-indigo-200'}`}>
-                                    {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <div className={`text-[10px] mt-2 opacity-60 text-right ${isModel ? 'text-slate-400' : 'text-indigo-200'}`}>
+                                    {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                             </div>
                         </div>

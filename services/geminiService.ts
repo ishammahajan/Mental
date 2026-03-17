@@ -15,7 +15,8 @@ const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || '';
 const HF_MODEL = 'Qwen/Qwen2.5-7B-Instruct';
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
 
-const IS_PRODUCTION = window.location.hostname !== 'localhost';
+const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const IS_PRODUCTION = currentHostname !== 'localhost';
 const PROXY_URL = IS_PRODUCTION
   ? 'https://speakup-backend.up.railway.app/api/chat'
   : 'http://localhost:3001/api/chat';

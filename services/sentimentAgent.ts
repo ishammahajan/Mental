@@ -2,8 +2,11 @@ import { Message, AgentAnalysis, WellnessTask } from "../types";
 import * as db from './storage';
 import { handleBookingRequest } from './bookingAgent';
 import { analyzeMentalHealthText } from './mentalHealthSentimentService';
+import { withTimeoutRetry } from './retryService';
+import { validateMessage } from './validationService';
 
-const IS_PRODUCTION = window.location.hostname !== 'localhost';
+const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const IS_PRODUCTION = currentHostname !== 'localhost';
 const PROXY_URL = IS_PRODUCTION
   ? 'https://speakup-backend.up.railway.app/api/chat'
   : 'http://localhost:3001/api/chat';
@@ -67,25 +70,79 @@ export const analyzeSentimentAndSchedule = async (
       { role: "user", content: `Context: ${conversationLog}` }
     ];
 
-    const res = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
+    // Use retry logic for resilience - will retry up to 3 times with exponential backoff
+    const data = await withTimeoutRetry(
+      async () => {
+        const res = await fetch(PROXY_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ messages })
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text().catch(() => 'Unknown error');
+          throw new Error(`HF Agent failed with status ${res.status}: ${errorText}`);
+        }
+
+        return res.json();
       },
-      body: JSON.stringify({ messages }),
-      signal: AbortSignal.timeout(10000)
-    });
-
-    if (!res.ok) throw new Error("HF Agent failed");
-
-    const data = await res.json();
+      12000  // 12 second timeout (slightly longer than single attempt)
+    );
     const rawContent = data?.choices?.[0]?.message?.content || '{}';
-    // attempt to extract json if it wrapped it in markdown
-    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-    const jsonText = jsonMatch ? jsonMatch[0] : rawContent;
+    
+    // Robust JSON extraction function
+    function extractJSON(text: string): string {
+      // Try markdown code block first (e.g., ```json {...}```)
+      const mdMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (mdMatch) {
+        try {
+          JSON.parse(mdMatch[1]);
+          return mdMatch[1];
+        } catch {
+          // Fall through to other methods
+        }
+      }
+      
+      // Try to find balanced JSON object
+      let braceCount = 0;
+      let start = -1;
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] === '{') {
+          if (braceCount === 0) start = i;
+          braceCount++;
+        } else if (text[i] === '}') {
+          braceCount--;
+          if (braceCount === 0 && start !== -1) {
+            const candidate = text.substring(start, i + 1);
+            try {
+              JSON.parse(candidate);
+              return candidate;
+            } catch {
+              // Continue searching
+              start = -1;
+            }
+          }
+        }
+      }
+      
+      // If nothing found, return safe default
+      return '{}';
+    }
 
-    const analysis: Partial<AgentAnalysis> & { recommendedAction: string; specificExercise?: string; reasoning?: string } =
-      JSON.parse(jsonText);
+    const jsonText = extractJSON(rawContent);
+    let analysis: Partial<AgentAnalysis> & { recommendedAction: string; specificExercise?: string; reasoning?: string };
+    
+    try {
+      analysis = JSON.parse(jsonText);
+    } catch (parseErr) {
+      console.error("[SParsh Guardian] Failed to parse agent JSON response:", parseErr);
+      console.error("[SParsh Guardian] Raw response was:", rawContent.substring(0, 200));
+      // Return null to trigger catch block for graceful degradation
+      throw new Error("Failed to parse sentiment analysis response");
+    }
+    
     console.log("Guardian Action:", analysis.recommendedAction);
 
     if (analysis.recommendedAction === 'ASSIGN_EXERCISE' && analysis.specificExercise) {
@@ -128,10 +185,13 @@ export const analyzeSentimentAndSchedule = async (
     return null;
 
   } catch (e: any) {
-    console.error("SLM Agent Error:", e);
+    // Log error for debugging
+    if (e.name !== 'AbortError') {
+      console.error("[SParsh Guardian] Agent analysis failed:", e.message);
+    }
 
-    // Even if Gemini fails, we can still act on critical HF result
-    if (hfResult.riskLevel === 'HIGH') {
+    // Graceful degradation: if HF risk was HIGH or CRITICAL, suggest booking anyway
+    if (hfResult?.riskLevel === 'HIGH' || hfResult?.riskLevel === 'MODERATE') {
       const openSlots = (await db.getSlots()).filter(s => s.status === 'open');
       if (openSlots.length > 0) {
         return {
@@ -142,6 +202,8 @@ export const analyzeSentimentAndSchedule = async (
         };
       }
     }
+    
+    // Silent fail for non-critical emotions
     return null;
   }
 };
