@@ -15,6 +15,18 @@ const CrisisOverlay: React.FC<CrisisOverlayProps> = ({ onDismiss }) => {
       </div>
 
       <div className="w-full max-w-md space-y-4">
+        <a href="tel:9820519373" className="block">
+          <div className="neu-flat p-6 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform border border-[var(--border-subtle)]">
+            <div className="p-3 bg-[var(--color-primary)] text-white rounded-full">
+              <Phone size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-[var(--color-text)]">Call Dimple Wagle</h3>
+              <p className="text-sm text-[var(--color-text-secondary)]">Campus Psychologist</p>
+            </div>
+          </div>
+        </a>
+
         <a href="tel:9152987823" className="block">
           <div className="neu-flat p-6 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform border border-[var(--border-subtle)]">
             <div className="p-3 bg-[var(--color-error)] text-white rounded-full">
@@ -22,19 +34,7 @@ const CrisisOverlay: React.FC<CrisisOverlayProps> = ({ onDismiss }) => {
             </div>
             <div>
               <h3 className="text-xl font-bold text-[var(--color-text)]">Call iCALL</h3>
-              <p className="text-sm text-[var(--color-text-secondary)]">24/7 Professional Support</p>
-            </div>
-          </div>
-        </a>
-
-        <a href="tel:9820519373" className="block">
-          <div className="neu-flat p-6 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform border border-[var(--border-subtle)]">
-            <div className="p-3 bg-[var(--color-primary)] text-white rounded-full">
-              <Phone size={24} />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-[var(--color-text)]">Call Counselor Dimple</h3>
-              <p className="text-sm text-[var(--color-text-secondary)]">Campus Psychologist</p>
+              <p className="text-sm text-[var(--color-text-secondary)]">Available Monday to Friday only</p>
             </div>
           </div>
         </a>

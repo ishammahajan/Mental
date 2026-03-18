@@ -394,7 +394,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     await createSlot({
       date: dateStr,
       time: selectedTime,
-      counselorName: 'Dr. Dimple Wagle',
+      counselorName: 'Dimple Wagle',
       status: 'open',
     });
     addNotification('New slot published successfully', 'success');
@@ -548,7 +548,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           </button>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">DW</div>
-            <span className="text-sm font-medium">Dr. Dimple Wagle</span>
+            <span className="text-sm font-medium">Dimple Wagle</span>
           </div>
         </div>
       </header>
