@@ -12,6 +12,7 @@ import {
 import { db as firestoreDb } from './firebaseConfig';
 import { P2PMessage } from '../types';
 import * as storage from './storage';
+import { isDemoMode } from './demoMode';
 
 const CHAT_COLLECTION = 'p2p_messages';
 
@@ -35,6 +36,10 @@ const normalize = (id: string, data: any): P2PMessage => ({
 });
 
 export const sendP2PMessage = async (msg: P2PMessage): Promise<void> => {
+  if (isDemoMode()) {
+    await storage.sendP2PMessage(msg);
+    return;
+  }
   try {
     await addDoc(collection(firestoreDb, CHAT_COLLECTION), {
       senderId: msg.senderId,
@@ -52,6 +57,9 @@ export const sendP2PMessage = async (msg: P2PMessage): Promise<void> => {
 };
 
 export const getP2PThread = async (userId1: string, userId2: string): Promise<P2PMessage[]> => {
+  if (isDemoMode()) {
+    return storage.getP2PThread(userId1, userId2);
+  }
   try {
     const q = query(
       collection(firestoreDb, CHAT_COLLECTION),
@@ -67,6 +75,9 @@ export const getP2PThread = async (userId1: string, userId2: string): Promise<P2
 };
 
 export const getUnreadP2PCount = async (userId: string): Promise<number> => {
+  if (isDemoMode()) {
+    return storage.getUnreadP2PCount(userId);
+  }
   try {
     const q = query(
       collection(firestoreDb, CHAT_COLLECTION),
@@ -81,6 +92,10 @@ export const getUnreadP2PCount = async (userId: string): Promise<number> => {
 };
 
 export const markThreadAsRead = async (receiverId: string, senderId: string): Promise<void> => {
+  if (isDemoMode()) {
+    await storage.markThreadAsRead(receiverId, senderId);
+    return;
+  }
   try {
     const q = query(
       collection(firestoreDb, CHAT_COLLECTION),
@@ -97,6 +112,9 @@ export const markThreadAsRead = async (receiverId: string, senderId: string): Pr
 };
 
 export const getCounselorConversations = async (counselorId: string) => {
+  if (isDemoMode()) {
+    return storage.getCounselorConversations(counselorId);
+  }
   try {
     const q = query(
       collection(firestoreDb, CHAT_COLLECTION),
@@ -138,6 +156,12 @@ export const subscribeToThread = (
   userId2: string,
   callback: (messages: P2PMessage[]) => void,
 ): Unsubscribe => {
+  if (isDemoMode()) {
+    const emit = async () => callback(await storage.getP2PThread(userId1, userId2));
+    emit();
+    const interval = setInterval(emit, 3000);
+    return () => clearInterval(interval);
+  }
   try {
     const q = query(
       collection(firestoreDb, CHAT_COLLECTION),

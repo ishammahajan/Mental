@@ -1,6 +1,11 @@
+import { isDemoMode } from './demoMode';
+
 const API_BASE = 'http://localhost:3001/api/rag';
 
 export const detectCrisisInText = async (text: string): Promise<{ isCrisis: boolean, reason: string }> => {
+    if (isDemoMode()) {
+        return { isCrisis: false, reason: '' };
+    }
     try {
         const res = await fetch(`${API_BASE}/detect-crisis`, {
             method: 'POST',
@@ -21,6 +26,9 @@ export const detectCrisisInText = async (text: string): Promise<{ isCrisis: bool
 };
 
 export const analyzeBurnoutRisk = async (metrics: any): Promise<string> => {
+    if (isDemoMode()) {
+        return 'Demo mode: burnout analysis is simulated. No critical risks detected.';
+    }
     try {
         const res = await fetch(`${API_BASE}/analyze-burnout`, {
             method: 'POST',

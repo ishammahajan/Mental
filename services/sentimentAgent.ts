@@ -4,6 +4,7 @@ import { handleBookingRequest } from './bookingAgent';
 import { analyzeMentalHealthText } from './mentalHealthSentimentService';
 import { withTimeoutRetry } from './retryService';
 import { validateMessage } from './validationService';
+import { isDemoMode } from './demoMode';
 
 const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const IS_PRODUCTION = currentHostname !== 'localhost';
@@ -35,6 +36,15 @@ export const analyzeSentimentAndSchedule = async (
       text: "CRITICAL ALERT: I am activating the campus emergency protocol. Help is on the way.",
       timestamp: new Date(), metadata: { type: 'crisis_trigger' }
     };
+  }
+
+  if (isDemoMode()) {
+    const lastUserMessage = recentMessages.filter(m => m.role === 'user').pop();
+    if (lastUserMessage && /book|schedule|slot|appointment/i.test(lastUserMessage.text)) {
+      const bookingResponse = await handleBookingRequest(userId, userEmail, lastUserMessage.text);
+      return { id: Date.now().toString(), role: 'agent', text: bookingResponse, timestamp: new Date(), metadata: { type: 'booking_confirmation' } };
+    }
+    return null;
   }
 
   const conversationLog = recentMessages.slice(-6).map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n');

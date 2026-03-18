@@ -20,6 +20,29 @@ import {
 import { db } from './firebaseConfig';
 import { User } from '../types';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { isDemoMode } from './demoMode';
+import { ensureDemoSeeded } from './storage';
+
+const LOCAL_USERS_KEY = 'speakup_cloud_users';
+
+const getLocalUsers = (): User[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+        const raw = window.localStorage.getItem(LOCAL_USERS_KEY);
+        return raw ? (JSON.parse(raw) as User[]) : [];
+    } catch {
+        return [];
+    }
+};
+
+const setLocalUsers = (users: User[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+    } catch {
+        // Ignore demo storage errors.
+    }
+};
 
 /** Generates a unique casefile ID like SPJ-A3BF-92ZX */
 const generateCasefileId = (): string => {
@@ -36,6 +59,34 @@ const generateCasefileId = (): string => {
  * Admins can change role in Firebase Console for counselors/admins.
  */
 export const getOrCreateUserProfile = async (fbUser: FirebaseUser): Promise<User> => {
+    if (isDemoMode()) {
+        ensureDemoSeeded();
+        const users = getLocalUsers();
+        const existing = users.find(u => u.email === fbUser.email);
+        if (existing) return existing;
+
+        const displayName = fbUser.displayName || '';
+        const parts = displayName.trim().split(/\s+/);
+        const firstName = parts[0] || '';
+        const middleName = parts.length >= 3 ? parts.slice(1, -1).join(' ') : '';
+        const lastName = parts.length >= 2 ? parts[parts.length - 1] : '';
+        const newProfile: User = {
+            id: fbUser.uid,
+            email: fbUser.email!,
+            firstName,
+            middleName,
+            lastName,
+            name: displayName || fbUser.email!.split('@')[0],
+            phone: '',
+            role: 'student',
+            casefileId: generateCasefileId(),
+            program: '',
+            likes: [],
+            dislikes: [],
+        };
+        setLocalUsers([...users, newProfile]);
+        return newProfile;
+    }
     const ref = doc(db, 'users', fbUser.uid);
     const snap = await getDoc(ref);
 
@@ -86,6 +137,16 @@ export const getOrCreateUserProfile = async (fbUser: FirebaseUser): Promise<User
  * Used by App.tsx when session is restored on page reload.
  */
 export const getUserProfile = async (uid: string): Promise<User | null> => {
+    if (isDemoMode()) {
+        ensureDemoSeeded();
+        const users = getLocalUsers();
+        const user = users.find(u => u.id === uid) || null;
+        if (!user) return null;
+        const name = [user.firstName, user.middleName, user.lastName]
+            .filter(Boolean)
+            .join(' ') || user.name;
+        return { ...user, name };
+    }
     const snap = await getDoc(doc(db, 'users', uid));
     if (!snap.exists()) return null;
     const data = snap.data() as User;
@@ -107,6 +168,17 @@ export const updateUserProfile = async (
     const name = [updates.firstName, updates.middleName, updates.lastName]
         .filter(Boolean)
         .join(' ');
+
+    if (isDemoMode()) {
+        ensureDemoSeeded();
+        const users = getLocalUsers();
+        const updated = users.map(user => user.id === uid
+            ? { ...user, ...updates, ...(name ? { name } : {}) }
+            : user
+        );
+        setLocalUsers(updated);
+        return;
+    }
 
     await updateDoc(doc(db, 'users', uid), {
         ...updates,

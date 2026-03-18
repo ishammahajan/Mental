@@ -2,13 +2,25 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import EnvironmentWidget from './EnvironmentWidget';
 import CounselorReportModal from './CounselorReportModal';
-import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, Map, LineChart as ChartIcon, Wand2, Activity, Send, Edit2, Bot } from 'lucide-react';
+import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, LineChart as ChartIcon, Wand2, Activity, Send, Edit2, Bot } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import * as db from '../services/storage';
 import * as chat from '../services/chatService';
 import { deleteTask } from '../services/storage';
 import { uploadGamePDF, getForgedGames, GameMetadata } from '../services/ragService';
-import { AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
+import {
+  AppointmentSlot,
+  CounselorEmailThread,
+  CounselorReport,
+  CounselorTaskItem,
+  ForgeQuestion,
+  ForgeResponse,
+  ForgeSurvey,
+  P2PMessage,
+  ConsentData,
+  User,
+  WellnessPost,
+} from '../types';
 import ConsentForm from './ConsentForm';
 import CounselorCopilot from './CounselorCopilot';
 import { useNotification } from '../contexts/NotificationContext';
@@ -26,6 +38,19 @@ import {
 import { COUNSELORS } from '../constants';
 import { collection, getDocs } from 'firebase/firestore';
 import { db as firestoreDb } from '../services/firebaseConfig';
+import {
+  saveCounselorTask,
+  extractForgeQuestionsFromText,
+  saveForgeResponse,
+  saveForgeSurvey,
+  saveReport,
+  subscribeCounselorTasksForCounselor,
+  subscribeEmailThreadsForCounselor,
+  subscribeForgeResponsesForCounselor,
+  subscribeForgeSurveysForCounselor,
+  updateCounselorTaskCompletion,
+  upsertEmailThread,
+} from '../services/counselorStudioService';
 
 // Mock Graph Data
 const stressData = [
@@ -35,6 +60,326 @@ const stressData = [
   { name: 'Thu', workload: 60 },
   { name: 'Fri', workload: 30 },
 ];
+
+type DemoCaseIndicator = {
+  label: string;
+  value: string;
+  trend: 'up' | 'down' | 'steady';
+  note: string;
+};
+
+type DemoInteraction = {
+  date: string;
+  channel: 'Chat' | 'In-person' | 'Call' | 'Email';
+  summary: string;
+  followUp: string;
+};
+
+type DemoAlert = {
+  level: 'High' | 'Medium' | 'Low';
+  title: string;
+  detail: string;
+  date: string;
+};
+
+type DemoCaseData = {
+  summary: string;
+  lastCheckIn: string;
+  riskLevel: 'High' | 'Moderate' | 'Low';
+  focusArea: string;
+  indicators: DemoCaseIndicator[];
+  interactions: DemoInteraction[];
+  alerts: DemoAlert[];
+  lastActive: string;
+};
+
+type DemoTask = import('../types').WellnessTask;
+
+type ReportTemplate = {
+  id: string;
+  title: string;
+  currentState: string;
+  concerns: string;
+  actions: string;
+};
+type ReminderItem = {
+  id: string;
+  type: 'task-overdue' | 'task-pending' | 'inactive';
+  studentId: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+  createdAt: string;
+};
+
+const demoStudents: User[] = [
+  {
+    id: 'stu_demo_aarohi',
+    casefileId: 'CF-1024',
+    name: 'Aarohi Mehta',
+    email: 'aarohi.mehta@spjimr.edu',
+    program: 'MBA Year 1',
+    role: 'student',
+  } as User,
+  {
+    id: 'stu_demo_kunal',
+    casefileId: 'CF-1081',
+    name: 'Kunal Iyer',
+    email: 'kunal.iyer@spjimr.edu',
+    program: 'MBA Year 2',
+    role: 'student',
+  } as User,
+  {
+    id: 'stu_demo_sana',
+    casefileId: 'CF-1103',
+    name: 'Sana Qureshi',
+    email: 'sana.qureshi@spjimr.edu',
+    program: 'MBA Year 1',
+    role: 'student',
+  } as User,
+  {
+    id: 'stu_demo_rhea',
+    casefileId: 'CF-1139',
+    name: 'Rhea Banerjee',
+    email: 'rhea.banerjee@spjimr.edu',
+    program: 'MBA Year 2',
+    role: 'student',
+  } as User,
+];
+
+const demoCaseData: Record<string, DemoCaseData> = {
+  stu_demo_aarohi: {
+    summary: 'High workload and sleep debt ahead of midterms; anxiety spikes in evening hours.',
+    lastCheckIn: 'Mar 12, 2026',
+    riskLevel: 'Moderate',
+    focusArea: 'Sleep hygiene and workload pacing',
+    indicators: [
+      { label: 'Stress', value: 'High', trend: 'up', note: 'Three deadlines in 5 days' },
+      { label: 'Sleep', value: '4-5 hrs', trend: 'down', note: 'Late-night submissions' },
+      { label: 'Mood', value: 'Anxious', trend: 'steady', note: 'Worries about performance' },
+    ],
+    interactions: [
+      { date: 'Mar 12', channel: 'Chat', summary: 'Discussed overwhelm; practiced 2-min grounding', followUp: '10-min walk after dinner' },
+      { date: 'Mar 08', channel: 'In-person', summary: 'Reviewed workload map; set 2-day buffer', followUp: 'Send updated task list' },
+      { date: 'Mar 01', channel: 'Email', summary: 'Shared breathing audio and sleep tips', followUp: 'Track sleep for 5 nights' },
+    ],
+    alerts: [
+      { level: 'High', title: 'Missed follow-up task', detail: 'No sleep log submitted for 10 days', date: 'Mar 15' },
+      { level: 'Medium', title: 'Late-night activity spike', detail: 'Active after 2:30 AM three nights', date: 'Mar 13' },
+    ],
+    lastActive: 'Mar 12, 2026',
+  },
+  stu_demo_kunal: {
+    summary: 'Low mood after internship feedback; reports social withdrawal and low energy.',
+    lastCheckIn: 'Mar 10, 2026',
+    riskLevel: 'High',
+    focusArea: 'Re-engagement and confidence rebuild',
+    indicators: [
+      { label: 'Mood', value: 'Low', trend: 'down', note: 'Negative self-talk reported' },
+      { label: 'Motivation', value: 'Low', trend: 'down', note: 'Skipped two classes' },
+      { label: 'Support', value: 'Limited', trend: 'steady', note: 'Avoiding peers this week' },
+    ],
+    interactions: [
+      { date: 'Mar 10', channel: 'Call', summary: 'Processed feedback; set small wins plan', followUp: '1:1 faculty check-in' },
+      { date: 'Mar 05', channel: 'Chat', summary: 'Reported low energy; encouraged peer buddy', followUp: 'Lunch with cohort mate' },
+      { date: 'Feb 26', channel: 'In-person', summary: 'Introduced cognitive reframing steps', followUp: 'Daily 3-line reflection' },
+    ],
+    alerts: [
+      { level: 'High', title: 'Class absence pattern', detail: 'Missed 2 consecutive lectures', date: 'Mar 11' },
+      { level: 'Medium', title: 'Withdrawal signal', detail: 'Muted chat for 7 days', date: 'Mar 09' },
+    ],
+    lastActive: 'Mar 10, 2026',
+  },
+  stu_demo_sana: {
+    summary: 'Steady progress; managing anxiety with journaling and peer support.',
+    lastCheckIn: 'Mar 14, 2026',
+    riskLevel: 'Low',
+    focusArea: 'Maintain routines and boundary setting',
+    indicators: [
+      { label: 'Stress', value: 'Moderate', trend: 'steady', note: 'Project workload stable' },
+      { label: 'Sleep', value: '6-7 hrs', trend: 'up', note: 'Consistent bedtime' },
+      { label: 'Engagement', value: 'High', trend: 'up', note: 'Active in peer group' },
+    ],
+    interactions: [
+      { date: 'Mar 14', channel: 'Chat', summary: 'Shared progress; reviewed boundary script', followUp: 'Practice assertive response' },
+      { date: 'Mar 07', channel: 'Email', summary: 'Sent coping plan template', followUp: 'Fill weekly plan' },
+      { date: 'Feb 28', channel: 'In-person', summary: 'Discussed social anxiety triggers', followUp: 'Attend 1 club meet' },
+    ],
+    alerts: [
+      { level: 'Low', title: 'Routine check-in', detail: 'Weekly check-in due tomorrow', date: 'Mar 17' },
+    ],
+    lastActive: 'Mar 14, 2026',
+  },
+  stu_demo_rhea: {
+    summary: 'Burnout risk from leadership role; reports tension headaches.',
+    lastCheckIn: 'Mar 09, 2026',
+    riskLevel: 'Moderate',
+    focusArea: 'Delegation and recovery breaks',
+    indicators: [
+      { label: 'Stress', value: 'High', trend: 'up', note: 'Event week overload' },
+      { label: 'Somatic', value: 'Headaches', trend: 'steady', note: 'Evening tension' },
+      { label: 'Sleep', value: '5-6 hrs', trend: 'down', note: 'Late meetings' },
+    ],
+    interactions: [
+      { date: 'Mar 09', channel: 'In-person', summary: 'Mapped delegation plan', followUp: 'Assign two co-leads' },
+      { date: 'Mar 03', channel: 'Call', summary: 'Discussed burnout signs', followUp: 'Schedule recovery block' },
+      { date: 'Feb 25', channel: 'Email', summary: 'Shared headache relief routine', followUp: 'Hydration check' },
+    ],
+    alerts: [
+      { level: 'Medium', title: 'Overtime hours logged', detail: 'Workday exceeded 12 hrs twice', date: 'Mar 12' },
+      { level: 'Low', title: 'Hydration reminder', detail: 'Below 1.5L intake this week', date: 'Mar 08' },
+    ],
+    lastActive: 'Mar 09, 2026',
+  },
+};
+
+const demoTasks: Record<string, DemoTask[]> = {
+  stu_demo_aarohi: [
+    {
+      id: 'task_aarohi_1',
+      title: '10-min walk after dinner',
+      description: 'Short recovery break to reset before study block.',
+      isCompleted: false,
+      assignedBy: 'counselor_dimple_wagle',
+    },
+    {
+      id: 'task_aarohi_2',
+      title: 'Sleep log (5 nights)',
+      description: 'Track bedtime and wake time for consistency.',
+      isCompleted: false,
+      assignedBy: 'counselor_dimple_wagle',
+    },
+  ],
+  stu_demo_kunal: [
+    {
+      id: 'task_kunal_1',
+      title: 'Check-in with faculty mentor',
+      description: 'Schedule a 15-min feedback alignment call.',
+      isCompleted: false,
+      assignedBy: 'counselor_dimple_wagle',
+    },
+  ],
+  stu_demo_sana: [
+    {
+      id: 'task_sana_1',
+      title: 'Boundary script practice',
+      description: 'Rehearse the assertive response twice this week.',
+      isCompleted: false,
+      assignedBy: 'counselor_dimple_wagle',
+    },
+  ],
+  stu_demo_rhea: [
+    {
+      id: 'task_rhea_1',
+      title: 'Delegate two tasks to co-leads',
+      description: 'Offload event logistics to reduce overtime.',
+      isCompleted: false,
+      assignedBy: 'counselor_dimple_wagle',
+    },
+  ],
+};
+
+const STUDIO_KEYS = {
+  EMAILS: 'speakup_mock_email_threads',
+  SURVEYS: 'speakup_mock_forge_surveys',
+  RESPONSES: 'speakup_mock_forge_responses',
+  TASKS: 'speakup_mock_counselor_tasks',
+  SNIPPETS: 'speakup_mock_report_snippets',
+};
+
+const demoEmailThreads: CounselorEmailThread[] = [
+  {
+    id: 'email_thread_aarohi',
+    counselorId: 'counselor_dimple_wagle',
+    studentId: 'stu_demo_aarohi',
+    subject: 'Follow-up on sleep routine',
+    participants: ['counselor@spjimr.edu', 'aarohi.mehta@spjimr.edu'],
+    messages: [
+      {
+        id: 'email_msg_1',
+        threadId: 'email_thread_aarohi',
+        senderName: 'Ms. Dimple Wagle',
+        senderEmail: 'counselor@spjimr.edu',
+        body: 'Hi Aarohi, sharing a short sleep routine checklist. Can you try it for 5 nights and reply with any blockers?',
+        timestamp: new Date(Date.now() - 86400000 * 3).toISOString(),
+        direction: 'sent',
+      },
+      {
+        id: 'email_msg_2',
+        threadId: 'email_thread_aarohi',
+        senderName: 'Aarohi Mehta',
+        senderEmail: 'aarohi.mehta@spjimr.edu',
+        body: 'Thanks maam, I tried two nights but got late submissions. Will retry this week.',
+        timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
+        direction: 'received',
+      },
+    ],
+  },
+  {
+    id: 'email_thread_kunal',
+    counselorId: 'counselor_dimple_wagle',
+    studentId: 'stu_demo_kunal',
+    subject: 'Small wins plan',
+    participants: ['counselor@spjimr.edu', 'kunal.iyer@spjimr.edu'],
+    messages: [
+      {
+        id: 'email_msg_3',
+        threadId: 'email_thread_kunal',
+        senderName: 'Ms. Dimple Wagle',
+        senderEmail: 'counselor@spjimr.edu',
+        body: 'Hi Kunal, attached a small wins worksheet. Pick 1 task for today and let me know how it feels.',
+        timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString(),
+        direction: 'sent',
+      },
+    ],
+  },
+];
+
+const reportTemplates: ReportTemplate[] = [
+  {
+    id: 'template_case_brief',
+    title: 'Case Brief',
+    currentState: 'Summarize the student current mental and academic state based on latest check-ins.',
+    concerns: 'Highlight the top 2-3 clinical or academic concerns observed.',
+    actions: 'Recommend immediate next steps with dates and accountability owner.',
+  },
+  {
+    id: 'template_supervisor',
+    title: 'Supervisor Update',
+    currentState: 'Provide a concise snapshot for leadership review and risk monitoring.',
+    concerns: 'List risks, patterns, or escalations needing attention.',
+    actions: 'Outline support actions and any escalation triggers.',
+  },
+];
+
+const defaultCaseData: DemoCaseData = {
+  summary: 'Workload pressure noted; steady engagement with coping routines.',
+  lastCheckIn: 'Mar 11, 2026',
+  riskLevel: 'Moderate',
+  focusArea: 'Workload pacing and sleep routine',
+  indicators: [
+    { label: 'Stress', value: 'Moderate', trend: 'steady', note: 'Project deadlines clustered' },
+    { label: 'Sleep', value: '5-6 hrs', trend: 'down', note: 'Late study hours' },
+    { label: 'Mood', value: 'Balanced', trend: 'steady', note: 'Uses breathing breaks' },
+  ],
+  interactions: [
+    { date: 'Mar 11', channel: 'Chat', summary: 'Reviewed weekly plan and coping tools', followUp: 'Set 2 recovery blocks' },
+    { date: 'Mar 04', channel: 'Email', summary: 'Shared time-block template', followUp: 'Send updated schedule' },
+    { date: 'Feb 27', channel: 'In-person', summary: 'Explored stress triggers', followUp: 'Journal 3 evenings' },
+  ],
+  alerts: [
+    { level: 'Medium', title: 'Routine check-in due', detail: 'No check-in in the last 7 days', date: 'Mar 16' },
+    { level: 'Low', title: 'Sleep variability', detail: 'Bedtime shifted by 2+ hours', date: 'Mar 13' },
+  ],
+  lastActive: 'Mar 11, 2026',
+};
+
+const getCaseData = (studentId: string, studentName: string) => {
+  const base = demoCaseData[studentId] || defaultCaseData;
+  return {
+    ...base,
+    summary: base.summary.replace('Workload pressure noted', `${studentName} is managing workload pressure`),
+  };
+};
 
 /** Generate PDF for a consent form */
 const downloadConsentAsPDF = async (slotId: string) => {
@@ -123,6 +468,41 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [isForging, setIsForging] = useState(false);
   const [forgedGames, setForgedGames] = useState<Record<string, GameMetadata>>({});
 
+  // Counselor Studio (Email, Reports, Forge, Tasks, Alerts)
+  const [showCounselorStudio, setShowCounselorStudio] = useState(false);
+  const [studioTab, setStudioTab] = useState<'email' | 'reports' | 'forge' | 'tasks' | 'alerts'>('email');
+  const [emailThreads, setEmailThreads] = useState<CounselorEmailThread[]>([]);
+  const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailTarget, setEmailTarget] = useState<'student' | 'group'>('student');
+  const [emailGroupId, setEmailGroupId] = useState('');
+
+  const [reportTemplateId, setReportTemplateId] = useState(reportTemplates[0]?.id || '');
+  const [reportSnippets, setReportSnippets] = useState<Record<string, string[]>>({});
+  const [reportSnippetInput, setReportSnippetInput] = useState('');
+  const [generatedReport, setGeneratedReport] = useState<CounselorReport | null>(null);
+  const [sendToSupervisor, setSendToSupervisor] = useState(false);
+
+  const [forgeStep, setForgeStep] = useState<'upload' | 'review' | 'assign' | 'results'>('upload');
+  const [forgeFileName, setForgeFileName] = useState('');
+  const [forgeTitle, setForgeTitle] = useState('');
+  const [forgeSourceText, setForgeSourceText] = useState('');
+  const [forgePdfFile, setForgePdfFile] = useState<File | null>(null);
+  const [isForgeExtracting, setIsForgeExtracting] = useState(false);
+  const [forgeExtractError, setForgeExtractError] = useState<string | null>(null);
+  const [forgeQuestions, setForgeQuestions] = useState<ForgeQuestion[]>([]);
+  const [forgeSurveys, setForgeSurveys] = useState<ForgeSurvey[]>([]);
+  const [forgeResponses, setForgeResponses] = useState<ForgeResponse[]>([]);
+  const [forgeAssignTarget, setForgeAssignTarget] = useState<'student' | 'group'>('student');
+  const [forgeAssignGroupId, setForgeAssignGroupId] = useState('');
+  const [selectedSurveyId, setSelectedSurveyId] = useState<string | null>(null);
+
+  const [counselorTasks, setCounselorTasks] = useState<CounselorTaskItem[]>([]);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState('');
+
   const [editSlot, setEditSlot] = useState<AppointmentSlot | null>(null);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
@@ -135,6 +515,65 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [studentTasks, setStudentTasks] = useState<{ studentEmail: string; tasks: import('../types').WellnessTask[] }[]>([]);
   const selectedStudentEmail = students.find(s => (s.casefileId || s.id) === selectedStudent)?.email || '';
   const selectedStudentTasks = studentTasks.find(st => st.studentEmail === selectedStudentEmail)?.tasks || [];
+
+  const visibleStudents = students.length > 0 ? students : demoStudents;
+  const selectedStudentRecord = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent) || null;
+  const selectedCaseData = selectedStudentRecord
+    ? getCaseData(selectedStudentRecord.casefileId || selectedStudentRecord.id, selectedStudentRecord.name || 'Student')
+    : null;
+  const isDemoMode = students.length === 0;
+  const demoTasksForSelected = selectedStudentRecord ? demoTasks[selectedStudentRecord.id] || [] : [];
+  const effectiveSelectedTasks = isDemoMode ? demoTasksForSelected : selectedStudentTasks;
+
+  const programGroups: { id: string; name: string }[] = Array.from(
+    new Map<string, { id: string; name: string }>(
+      visibleStudents
+        .filter(s => s.program)
+        .map(s => [s.program as string, { id: s.program as string, name: s.program as string }])
+    ).values()
+  );
+
+  const selectedEmailThread = emailThreads.find(t => t.id === selectedEmailThreadId) || null;
+  const activeReportTemplate = reportTemplates.find(t => t.id === reportTemplateId) || reportTemplates[0];
+
+  const loadFromStorage = <T,>(key: string, fallback: T): T => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const saveToStorage = (key: string, value: unknown) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Ignore storage errors in mock mode
+    }
+  };
+
+  const mergeById = <T extends { id: string }>(values: T[]): T[] => {
+    const map = new Map<string, T>();
+    values.forEach(value => map.set(value.id, value));
+    return Array.from(map.values());
+  };
+
+  const normalizeSurvey = (survey: ForgeSurvey): ForgeSurvey => {
+    const assignedStudentIds = survey.assignedStudentIds || survey.assignedTo.filter(a => a.type === 'student').map(a => a.id);
+    const assignedGroupIds = survey.assignedGroupIds || survey.assignedTo.filter(a => a.type === 'group').map(a => a.id);
+    return {
+      ...survey,
+      counselorId: survey.counselorId || counselorId,
+      assignedStudentIds,
+      assignedGroupIds,
+    };
+  };
+
+  const normalizeThread = (thread: CounselorEmailThread): CounselorEmailThread => ({
+    ...thread,
+    counselorId: thread.counselorId || counselorId,
+  });
 
 
   // ── Real-time Firestore slot subscription (instant cross-device updates)
@@ -203,6 +642,101 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     init();
     return () => clearInterval(interval);
   }, [showChatModal, selectedStudent, counselorId]);
+
+  useEffect(() => {
+    const storedThreads = loadFromStorage<CounselorEmailThread[]>(STUDIO_KEYS.EMAILS, []);
+    const storedSurveys = loadFromStorage<ForgeSurvey[]>(STUDIO_KEYS.SURVEYS, []);
+    const storedResponses = loadFromStorage<ForgeResponse[]>(STUDIO_KEYS.RESPONSES, []);
+    const storedTasks = loadFromStorage<CounselorTaskItem[]>(STUDIO_KEYS.TASKS, []);
+    const storedSnippets = loadFromStorage<Record<string, string[]>>(STUDIO_KEYS.SNIPPETS, {});
+
+    setEmailThreads((storedThreads.length > 0 ? storedThreads : demoEmailThreads).map(normalizeThread));
+    setForgeSurveys(storedSurveys.map(normalizeSurvey));
+    setForgeResponses(storedResponses);
+    setCounselorTasks(storedTasks);
+    setReportSnippets(storedSnippets);
+  }, []);
+
+  useEffect(() => {
+    const unsubThreads = subscribeEmailThreadsForCounselor(counselorId, (threads) => {
+      if (threads.length > 0) {
+        setEmailThreads(threads.map(normalizeThread));
+      }
+    });
+    const unsubSurveys = subscribeForgeSurveysForCounselor(counselorId, (surveys) => {
+      if (surveys.length > 0) {
+        setForgeSurveys(surveys.map(normalizeSurvey));
+      }
+    });
+    const unsubTasks = subscribeCounselorTasksForCounselor(counselorId, (tasks) => {
+      if (tasks.length > 0) {
+        setCounselorTasks(tasks);
+      }
+    });
+    return () => {
+      unsubThreads();
+      unsubSurveys();
+      unsubTasks();
+    };
+  }, [counselorId]);
+
+  useEffect(() => {
+    if (forgeSurveys.length === 0) return;
+    const unsubs = forgeSurveys.map((survey) =>
+      subscribeForgeResponsesForCounselor(survey.id, (responses) => {
+        setForgeResponses(prev => mergeById([...prev.filter(r => r.surveyId !== survey.id), ...responses]));
+      })
+    );
+    return () => unsubs.forEach((unsub) => unsub());
+  }, [forgeSurveys]);
+
+  useEffect(() => {
+    saveToStorage(STUDIO_KEYS.EMAILS, emailThreads);
+  }, [emailThreads]);
+
+  useEffect(() => {
+    saveToStorage(STUDIO_KEYS.SURVEYS, forgeSurveys);
+  }, [forgeSurveys]);
+
+  useEffect(() => {
+    saveToStorage(STUDIO_KEYS.RESPONSES, forgeResponses);
+  }, [forgeResponses]);
+
+  useEffect(() => {
+    saveToStorage(STUDIO_KEYS.TASKS, counselorTasks);
+  }, [counselorTasks]);
+
+  useEffect(() => {
+    saveToStorage(STUDIO_KEYS.SNIPPETS, reportSnippets);
+  }, [reportSnippets]);
+
+  useEffect(() => {
+    if (visibleStudents.length === 0) return;
+    const visibleIds = new Set(visibleStudents.map(s => s.casefileId || s.id));
+    if (!selectedStudent || !visibleIds.has(selectedStudent)) {
+      setSelectedStudent(visibleStudents[0].casefileId || visibleStudents[0].id);
+    }
+  }, [visibleStudents, selectedStudent]);
+
+  useEffect(() => {
+    if (!selectedStudent) return;
+    const existing = emailThreads.find(t => t.studentId === selectedStudent);
+    if (existing) {
+      setSelectedEmailThreadId(existing.id);
+      return;
+    }
+    const newThread: CounselorEmailThread = {
+      id: `email_thread_${selectedStudent}`,
+      counselorId,
+      studentId: selectedStudent,
+      subject: `Check-in with ${selectedStudentRecord?.name || 'student'}`,
+      participants: ['counselor@spjimr.edu', selectedStudentRecord?.email || 'student@spjimr.edu'],
+      messages: [],
+    };
+    setEmailThreads(prev => [...prev, newThread]);
+    setSelectedEmailThreadId(newThread.id);
+    upsertEmailThread(newThread).catch(() => {});
+  }, [selectedStudent, selectedStudentRecord, emailThreads]);
 
   const handleCreatePost = async () => {
     if (!postTitle.trim() || !postBody.trim()) return;
@@ -425,6 +959,404 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
   };
 
+  const ensureThreadForStudent = (studentId: string) => {
+    const existing = emailThreads.find(t => t.studentId === studentId);
+    if (existing) return existing;
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === studentId);
+    const newThread: CounselorEmailThread = {
+      id: `email_thread_${studentId}`,
+      counselorId,
+      studentId,
+      subject: `Check-in with ${student?.name || 'student'}`,
+      participants: ['counselor@spjimr.edu', student?.email || 'student@spjimr.edu'],
+      messages: [],
+    };
+    setEmailThreads(prev => [...prev, newThread]);
+    upsertEmailThread(newThread).catch(() => {});
+    return newThread;
+  };
+
+  const sendEmailToThread = (threadId: string, body: string, subject?: string) => {
+    if (!body.trim()) return;
+    let updatedThread: CounselorEmailThread | null = null;
+    setEmailThreads(prev => prev.map(thread => {
+      if (thread.id !== threadId) return thread;
+      const nextSubject = subject?.trim() ? subject.trim() : thread.subject;
+      const message = {
+        id: `email_msg_${Date.now()}`,
+        threadId: thread.id,
+        senderName: 'Ms. Dimple Wagle',
+        senderEmail: 'counselor@spjimr.edu',
+        body: body.trim(),
+        timestamp: new Date().toISOString(),
+        direction: 'sent' as const,
+      };
+      updatedThread = {
+        ...thread,
+        subject: nextSubject,
+        messages: [...thread.messages, message],
+      };
+      return updatedThread;
+    }));
+    if (updatedThread) {
+      upsertEmailThread(updatedThread).catch(() => {});
+    }
+  };
+
+  const handleSendEmail = () => {
+    if (!emailBody.trim()) return;
+    if (emailTarget === 'student' && selectedStudent) {
+      const thread = ensureThreadForStudent(selectedStudent);
+      sendEmailToThread(thread.id, emailBody, emailSubject);
+    }
+
+    if (emailTarget === 'group' && emailGroupId) {
+      const groupStudents = visibleStudents.filter(s => s.program === emailGroupId);
+      groupStudents.forEach(student => {
+        const thread = ensureThreadForStudent(student.casefileId || student.id);
+        sendEmailToThread(thread.id, emailBody, emailSubject);
+      });
+    }
+
+    setEmailBody('');
+    addNotification('Email sent (mock).', 'success');
+  };
+
+  const handleSimulateReply = (threadId: string) => {
+    let updatedThread: CounselorEmailThread | null = null;
+    setEmailThreads(prev => prev.map(thread => {
+      if (thread.id !== threadId) return thread;
+      const student = visibleStudents.find(s => (s.casefileId || s.id) === thread.studentId);
+      const reply = {
+        id: `email_msg_${Date.now()}`,
+        threadId: thread.id,
+        senderName: student?.name || 'Student',
+        senderEmail: student?.email || 'student@spjimr.edu',
+        body: 'Thanks for the note. I will update you by tomorrow.',
+        timestamp: new Date().toISOString(),
+        direction: 'received' as const,
+      };
+      updatedThread = { ...thread, messages: [...thread.messages, reply] };
+      return updatedThread;
+    }));
+    if (updatedThread) {
+      upsertEmailThread(updatedThread).catch(() => {});
+    }
+  };
+
+  const buildSurveySummary = (studentId: string) => {
+    const responses = forgeResponses
+      .filter(r => r.studentId === studentId)
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+    const latest = responses[0];
+    if (!latest) return '';
+    const survey = forgeSurveys.find(s => s.id === latest.surveyId);
+    if (!survey) return '';
+    const avgScore = latest.answers.length
+      ? (latest.answers.reduce((acc, a) => acc + a.score, 0) / latest.answers.length).toFixed(1)
+      : '0';
+    return `Survey: ${survey.title}. Avg score: ${avgScore}. Responses: ${latest.answers.length}.`;
+  };
+
+  const handleGenerateReport = () => {
+    if (!selectedStudent || !selectedCaseData || !activeReportTemplate) return;
+    const snippets = reportSnippets[selectedStudent] || [];
+    const taskCount = counselorTasks.filter(t => t.studentId === selectedStudent && !t.completedAt).length;
+    const surveySummary = buildSurveySummary(selectedStudent);
+
+    const report: CounselorReport = {
+      id: `report_${Date.now()}`,
+      counselorId,
+      studentId: selectedStudent,
+      generatedAt: new Date().toISOString(),
+      currentState: `${activeReportTemplate.currentState} ${selectedCaseData.summary}`,
+      concerns: `${activeReportTemplate.concerns} Risk level: ${selectedCaseData.riskLevel}.`,
+      actions: `${activeReportTemplate.actions} Active tasks: ${taskCount}.`,
+      snippets,
+      surveySummary: surveySummary || undefined,
+      taskSummary: taskCount ? `${taskCount} open tasks assigned.` : 'No open tasks assigned.',
+    };
+    setGeneratedReport(report);
+    saveReport(report).catch(() => {});
+    if (sendToSupervisor) {
+      addNotification('Report shared with Supervisor / Associate Dean (mock).', 'success');
+    }
+  };
+
+  const handleAddSnippet = () => {
+    if (!selectedStudent || !reportSnippetInput.trim()) return;
+    setReportSnippets(prev => ({
+      ...prev,
+      [selectedStudent]: [...(prev[selectedStudent] || []), reportSnippetInput.trim()],
+    }));
+    setReportSnippetInput('');
+  };
+
+  const adjustMeanings = (scale: number) => {
+    if (!Number.isFinite(scale) || scale <= 0) return [];
+    return Array.from({ length: scale }, (_, i) => `Score ${i + 1}: ${i + 1 === scale ? 'High' : 'Moderate'}`);
+  };
+
+  const extractPdfText = async (file: File): Promise<string> => {
+    const pdfjs = await import('pdfjs-dist');
+    // Set worker source for Vite + ESM builds.
+    (pdfjs as any).GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url
+    ).toString();
+
+    const buffer = await file.arrayBuffer();
+    const pdf = await (pdfjs as any).getDocument({ data: buffer }).promise;
+    let text = '';
+    for (let pageIndex = 1; pageIndex <= pdf.numPages; pageIndex += 1) {
+      const page = await pdf.getPage(pageIndex);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item: any) => item.str).join(' ');
+      text += `${pageText}\n`;
+    }
+    return text.trim();
+  };
+
+  const handleForgeFileChange = async (file: File | null) => {
+    setForgePdfFile(file);
+    setForgeFileName(file?.name || '');
+    setForgeExtractError(null);
+    if (!file) {
+      setForgeSourceText('');
+      return;
+    }
+    setIsForgeExtracting(true);
+    try {
+      const text = await extractPdfText(file);
+      if (!text) {
+        addNotification('No readable text found in this PDF.', 'warning');
+        setForgeExtractError('No readable text found in this PDF. If this is a scanned file, text extraction will be empty without OCR.');
+      }
+      setForgeSourceText(text);
+    } catch (error) {
+      console.warn('[Forge Extract] PDF text extraction failed.', error);
+      setForgeExtractError(`PDF text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addNotification('PDF text extraction failed. Try a different file.', 'error');
+    } finally {
+      setIsForgeExtracting(false);
+    }
+  };
+
+  const handleForgeExtract = async () => {
+    setForgeExtractError(null);
+    if (!forgeFileName.trim() && !forgeSourceText.trim()) {
+      setForgeExtractError('Please upload a PDF or paste text before extracting questions.');
+      addNotification('Select a PDF or paste text before extracting questions.', 'warning');
+      return;
+    }
+    if (!forgeSourceText.trim() && forgePdfFile) {
+      setIsForgeExtracting(true);
+      await handleForgeFileChange(forgePdfFile);
+    }
+    if (!forgeSourceText.trim()) {
+      setForgeExtractError('No PDF text available. Upload a text-based PDF or paste text manually.');
+      addNotification('Please provide readable PDF text before extracting questions.', 'warning');
+      return;
+    }
+    try {
+      setIsForgeExtracting(true);
+      const extracted = await extractForgeQuestionsFromText(forgeSourceText, { maxQuestions: 8, defaultScale: 5 });
+      if (extracted.length === 0) {
+        setForgeExtractError('No questions were found in the extracted text. Try a different file or edit the text.');
+        addNotification('No questions found in the provided text.', 'warning');
+        return;
+      }
+      setForgeQuestions(extracted.map(q => {
+        const safeScale = Number.isFinite(q.scale) && q.scale > 0 ? q.scale : 5;
+        return {
+          ...q,
+          scale: safeScale,
+          meanings: q.meanings?.length ? q.meanings : adjustMeanings(safeScale),
+        };
+      }));
+      setForgeStep('review');
+    } catch (error) {
+      console.warn('[Forge Extract] RAG+LLM failed, keeping existing questions.', error);
+      setForgeExtractError(`Question extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addNotification('Question extraction failed. Please try again.', 'error');
+    } finally {
+      setIsForgeExtracting(false);
+    }
+  };
+
+  const handleForgeScaleChange = (questionId: string, scale: number) => {
+    setForgeQuestions(prev => prev.map(q => q.id === questionId
+      ? { ...q, scale, meanings: Array.from({ length: scale }, (_, i) => q.meanings[i] || `Score ${i + 1}`) }
+      : q
+    ));
+  };
+
+  const handleCreateSurvey = () => {
+    if (!forgeTitle.trim() || forgeQuestions.length === 0) return;
+    const assignments: { type: 'student' | 'group'; id: string; name: string }[] = [];
+    const assignedStudentIds: string[] = [];
+    const assignedGroupIds: string[] = [];
+    if (forgeAssignTarget === 'student' && selectedStudentRecord) {
+      const studentId = selectedStudentRecord.casefileId || selectedStudentRecord.id;
+      assignments.push({ type: 'student', id: studentId, name: selectedStudentRecord.name });
+      assignedStudentIds.push(studentId);
+    }
+    if (forgeAssignTarget === 'group' && forgeAssignGroupId) {
+      assignments.push({ type: 'group', id: forgeAssignGroupId, name: forgeAssignGroupId });
+      assignedGroupIds.push(forgeAssignGroupId);
+    }
+    const survey: ForgeSurvey = {
+      id: `survey_${Date.now()}`,
+      counselorId,
+      title: forgeTitle.trim(),
+      sourceFileName: forgeFileName || 'manual.pdf',
+      questions: forgeQuestions,
+      assignedTo: assignments,
+      assignedStudentIds,
+      assignedGroupIds,
+      createdAt: new Date().toISOString(),
+    };
+    setForgeSurveys(prev => [survey, ...prev]);
+    setSelectedSurveyId(survey.id);
+    setForgeStep('results');
+    saveForgeSurvey(survey).catch(() => {});
+  };
+
+  const handleSimulateResponses = (survey: ForgeSurvey) => {
+    const assignedStudents = new Set<string>();
+    survey.assignedTo.forEach(a => {
+      if (a.type === 'student') {
+        assignedStudents.add(a.id);
+      } else {
+        visibleStudents.filter(s => s.program === a.id).forEach(s => assignedStudents.add(s.casefileId || s.id));
+      }
+    });
+
+    const newResponses: ForgeResponse[] = Array.from(assignedStudents).map(studentId => ({
+      id: `response_${survey.id}_${studentId}_${Date.now()}`,
+      surveyId: survey.id,
+      studentId,
+      submittedAt: new Date().toISOString(),
+      answers: survey.questions.map(q => ({
+        questionId: q.id,
+        score: Math.max(1, Math.min(q.scale, Math.floor(Math.random() * q.scale) + 1)),
+      })),
+    }));
+
+    setForgeResponses(prev => [...newResponses, ...prev]);
+    newResponses.forEach(response => {
+      saveForgeResponse(response).catch(() => {});
+    });
+    addNotification('Survey responses stored (mock).', 'success');
+  };
+
+  const handleSendSurveyToChat = async () => {
+    if (!selectedStudent) return;
+    const summary = buildSurveySummary(selectedStudent);
+    if (!summary) return;
+    await chat.sendP2PMessage({
+      id: Date.now().toString(),
+      senderId: counselorId,
+      receiverId: selectedStudent,
+      text: `Survey update: ${summary}`,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+    });
+    setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
+    addNotification('Survey summary sent to chat (mock).', 'success');
+  };
+
+  const handleCreateTask = async () => {
+    if (!selectedStudent || !taskTitle.trim() || !taskDueDate) return;
+    const newTask: CounselorTaskItem = {
+      id: `ctask_${Date.now()}`,
+      counselorId,
+      studentId: selectedStudent,
+      title: taskTitle.trim(),
+      description: taskDescription.trim() || 'Assigned follow-up.',
+      assignedAt: new Date().toISOString(),
+      dueAt: new Date(taskDueDate).toISOString(),
+    };
+    setCounselorTasks(prev => [newTask, ...prev]);
+    saveCounselorTask(newTask).catch(() => {});
+    setTaskTitle('');
+    setTaskDescription('');
+    setTaskDueDate('');
+
+    const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
+    if (student) {
+      await db.assignTask(student.email, {
+        id: newTask.id,
+        title: newTask.title,
+        description: newTask.description,
+        isCompleted: false,
+        assignedBy: 'counselor_dimple_wagle',
+      });
+      const updated = await db.getCounselorAssignedTasks();
+      setStudentTasks(updated);
+    }
+    addNotification('Task assigned (mock).', 'success');
+  };
+
+  const markTaskCompleted = (taskId: string) => {
+    const completedAt = new Date().toISOString();
+    setCounselorTasks(prev => prev.map(t => t.id === taskId ? { ...t, completedAt } : t));
+    updateCounselorTaskCompletion(taskId, completedAt).catch(() => {});
+  };
+
+  const getTaskStatus = (task: CounselorTaskItem) => {
+    if (task.completedAt) return 'completed';
+    const due = new Date(task.dueAt).getTime();
+    if (due < Date.now()) return 'overdue';
+    return 'pending';
+  };
+
+  const buildReminderItems = (): ReminderItem[] => {
+    const reminders: ReminderItem[] = [];
+    counselorTasks.forEach(task => {
+      const status = getTaskStatus(task);
+      const ageDays = Math.floor((Date.now() - new Date(task.assignedAt).getTime()) / 86400000);
+      if (status === 'overdue') {
+        reminders.push({
+          id: `reminder_${task.id}`,
+          type: 'task-overdue',
+          studentId: task.studentId,
+          message: `Task overdue: ${task.title}`,
+          severity: 'high',
+          createdAt: new Date().toISOString(),
+        });
+      } else if (status === 'pending' && ageDays >= 7) {
+        reminders.push({
+          id: `reminder_${task.id}`,
+          type: 'task-pending',
+          studentId: task.studentId,
+          message: `Task pending for ${ageDays} days: ${task.title}`,
+          severity: 'medium',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    visibleStudents.forEach(student => {
+      const studentId = student.casefileId || student.id;
+      const caseData = getCaseData(studentId, student.name || 'Student');
+      const lastActive = new Date(caseData.lastActive).getTime();
+      const inactiveDays = Math.floor((Date.now() - lastActive) / 86400000);
+      if (inactiveDays >= 15) {
+        reminders.push({
+          id: `inactive_${studentId}`,
+          type: 'inactive',
+          studentId,
+          message: `${student.name} inactive for ${inactiveDays} days`,
+          severity: inactiveDays >= 30 ? 'high' : 'medium',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    return reminders;
+  };
+
   const openChatFromInbox = async (studentId: string) => {
     setSelectedStudent(studentId);
     const convo = conversations.find(c => c.studentId === studentId);
@@ -492,6 +1424,14 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f1e6df] hover:bg-[#f1e6df] text-[var(--color-text)] rounded-lg text-xs font-bold border border-[var(--border-subtle)] transition-colors"
           >
             <Download size={14} /> Report
+          </button>
+
+          <button
+            onClick={() => { setShowCounselorStudio(true); setStudioTab('email'); }}
+            title="Open counselor studio"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-[var(--color-text)] rounded-lg text-xs font-bold border border-[var(--border-subtle)] transition-colors"
+          >
+            <Bot size={14} /> Studio
           </button>
 
           {/* Bell Notification Dropdown */}
@@ -565,8 +1505,9 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
             <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs font-bold">Live</span>
           </div>
           <div className="overflow-y-auto flex-1 p-2 space-y-2">
-            {students.map((student) => {
+            {visibleStudents.map((student) => {
               const studentId = student.casefileId || student.id;
+              const caseData = getCaseData(studentId, student.name || 'Student');
 
               // Calculate days since last session
               let daysSinceLastSession: number | null = null;
@@ -579,11 +1520,13 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                 .filter(d => !isNaN(d.getTime()) && d < new Date())
                 .sort((a, b) => b.getTime() - a.getTime());
 
-              if (myPastSlots.length > 0) {
-                daysSinceLastSession = Math.floor((Date.now() - myPastSlots[0].getTime()) / (1000 * 60 * 60 * 24));
+              const lastActiveDate = myPastSlots[0] || new Date(caseData.lastActive);
+              if (!isNaN(lastActiveDate.getTime())) {
+                daysSinceLastSession = Math.floor((Date.now() - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24));
               }
 
               const isInactive = daysSinceLastSession !== null && daysSinceLastSession >= 15;
+              const topAlert = caseData.alerts[0];
 
               return (
                 <div key={student.id} onClick={() => setSelectedStudent(studentId)}
@@ -593,18 +1536,21 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                     {isInactive ? (
                       <span className="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px] flex items-center gap-1"><AlertTriangle size={10} /> {daysSinceLastSession} Days Inactive</span>
                     ) : (
-                      <AlertTriangle size={14} className="text-red-500" />
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${topAlert.level === 'High' ? 'bg-red-100 text-red-700' : topAlert.level === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {topAlert.level} Alert
+                      </span>
                     )}
                   </div>
                   <div className="flex justify-between items-end">
                     <div>
                       <div className="text-sm font-medium text-slate-700">{student.name}</div>
                       <div className={`text-xs font-bold text-slate-500 mt-0.5`}>{student.program}</div>
+                      <div className="text-[10px] text-slate-400 mt-1">{topAlert.title}</div>
                     </div>
                     <div className="text-right">
                       <div className="text-[10px] text-slate-400">Last Active</div>
                       <div className="text-xs font-medium text-slate-600">
-                        {myPastSlots.length > 0 ? myPastSlots[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                        {!isNaN(lastActiveDate.getTime()) ? lastActiveDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
                       </div>
                     </div>
                   </div>
@@ -620,14 +1566,11 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
             <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h2 className="text-base md:text-lg font-bold text-slate-800">
-                  Case File: {selectedStudent ? (
-                    (() => {
-                      const s = students.find(st => (st.casefileId || st.id) === selectedStudent);
-                      return s ? `${s.name} (${s.casefileId || s.id})` : selectedStudent;
-                    })()
-                  ) : 'Select a student'}
+                  Case File: {selectedStudentRecord ? `${selectedStudentRecord.name} (${selectedStudentRecord.casefileId || selectedStudentRecord.id})` : 'Select a student'}
                 </h2>
-                <p className="text-xs md:text-sm text-slate-500">{selectedStudent ? 'MBA Year 1 • High Workload detected' : 'Click a student on the left to view details'}</p>
+                <p className="text-xs md:text-sm text-slate-500">
+                  {selectedCaseData ? `${selectedStudentRecord?.program || 'Program'} • ${selectedCaseData.focusArea}` : 'Click a student on the left to view details'}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 <button onClick={() => setShowTaskModal(true)} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 transition-colors">
@@ -648,19 +1591,103 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
               </div>
             </div>
 
-            <div className="p-6 flex-1">
-              <ResponsiveContainer width="100%" height="80%">
-                <AreaChart data={stressData}>
-                  <defs>
-                    <linearGradient id="colorWorkload" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#a66a63" stopOpacity={0.1} /><stop offset="95%" stopColor="#a66a63" stopOpacity={0} /></linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e6dad1" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#7c7470' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 12, fill: '#7c7470' }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Area type="monotone" dataKey="workload" stroke="#a66a63" strokeWidth={2} fillOpacity={1} fill="url(#colorWorkload)" name="Workload" />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="p-6 flex-1 flex flex-col gap-4">
+              {selectedCaseData && (
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`px-2 py-1 rounded-full font-bold ${selectedCaseData.riskLevel === 'High' ? 'bg-red-100 text-red-700' : selectedCaseData.riskLevel === 'Moderate' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      Risk: {selectedCaseData.riskLevel}
+                    </span>
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-semibold">Last check-in: {selectedCaseData.lastCheckIn}</span>
+                    <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">Focus: {selectedCaseData.focusArea}</span>
+                  </div>
+                  {isDemoMode && (
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-500 font-semibold">Demo data</span>
+                  )}
+                </div>
+              )}
+
+              <div className="text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-lg p-3">
+                <span className="font-semibold text-slate-700">Case Summary:</span>{' '}
+                {selectedCaseData?.summary || 'Select a student to view case summary.'}
+              </div>
+
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={stressData}>
+                    <defs>
+                      <linearGradient id="colorWorkload" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#a66a63" stopOpacity={0.1} /><stop offset="95%" stopColor="#a66a63" stopOpacity={0} /></linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e6dad1" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#7c7470' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: '#7c7470' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Area type="monotone" dataKey="workload" stroke="#a66a63" strokeWidth={2} fillOpacity={1} fill="url(#colorWorkload)" name="Workload" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-slate-100 bg-white p-4">
+                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Mental State Indicators</h3>
+                  <div className="space-y-2">
+                    {(selectedCaseData?.indicators || defaultCaseData.indicators).map((indicator) => (
+                      <div key={indicator.label} className="flex items-start justify-between gap-3 bg-slate-50 rounded-lg p-2.5">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">{indicator.label}: {indicator.value}</p>
+                          <p className="text-[11px] text-slate-500">{indicator.note}</p>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${indicator.trend === 'up' ? 'bg-red-100 text-red-700' : indicator.trend === 'down' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {indicator.trend === 'up' ? 'Rising' : indicator.trend === 'down' ? 'Declining' : 'Stable'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-100 bg-white p-4">
+                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Active Alerts</h3>
+                  <div className="space-y-2">
+                    {(selectedCaseData?.alerts || defaultCaseData.alerts).map((alert) => (
+                      <div key={`${alert.title}-${alert.date}`} className="flex items-start gap-3 bg-slate-50 rounded-lg p-2.5">
+                        <div className={`mt-0.5 h-7 w-7 rounded-lg flex items-center justify-center ${alert.level === 'High' ? 'bg-red-100 text-red-600' : alert.level === 'Medium' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                          <AlertTriangle size={14} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold text-slate-700">{alert.title}</p>
+                            <span className="text-[10px] text-slate-400">{alert.date}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">{alert.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-100 bg-white p-4">
+                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Recent Interactions</h3>
+                <div className="space-y-3">
+                  {(selectedCaseData?.interactions || defaultCaseData.interactions).map((interaction) => (
+                    <div key={`${interaction.date}-${interaction.summary}`} className="flex items-start gap-3">
+                      <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+                        {interaction.channel === 'Chat' && <MessageSquare size={14} />}
+                        {interaction.channel === 'In-person' && <Users size={14} />}
+                        {interaction.channel === 'Call' && <Phone size={14} />}
+                        {interaction.channel === 'Email' && <Mail size={14} />}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-slate-700">{interaction.channel} • {interaction.date}</p>
+                          <span className="text-[10px] text-slate-400">Follow-up: {interaction.followUp}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">{interaction.summary}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -668,13 +1695,13 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           {selectedStudent && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
               <h3 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
-                <ClipboardList size={14} /> Tasks Assigned to {selectedStudent}
+                <ClipboardList size={14} /> Tasks Assigned to {selectedStudentRecord?.name || selectedStudent}
               </h3>
-              {selectedStudentTasks.filter(t => t.assignedBy !== 'system' && !t.isCompleted).length === 0 ? (
+              {effectiveSelectedTasks.filter(t => t.assignedBy !== 'system' && !t.isCompleted).length === 0 ? (
                 <p className="text-slate-400 text-xs text-center py-3">No active tasks assigned.</p>
               ) : (
                 <div className="space-y-2">
-                  {selectedStudentTasks.filter(t => t.assignedBy !== 'system' && !t.isCompleted).map(task => (
+                  {effectiveSelectedTasks.filter(t => t.assignedBy !== 'system' && !t.isCompleted).map(task => (
                     <div key={task.id} className={`flex items-start gap-3 p-2.5 rounded-lg bg-gray-50`}>
                       <div className={`w-4 h-4 rounded-full flex-shrink-0 mt-0.5 border-2 border-gray-300`} />
                       <div className="flex-1 min-w-0">
@@ -1021,6 +2048,18 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           {/* ── QUEST FORGE PANEL ───────────────────────────────────────────── */}
           {activePanel === 'questForge' && (
             <div className="flex flex-col h-[calc(100vh-280px)] overflow-y-auto p-4 bg-slate-50 relative">
+              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-amber-800">Forge Studio upgraded</p>
+                  <p className="text-[11px] text-amber-700">Use the new Forge flow in Counselor Studio.</p>
+                </div>
+                <button
+                  onClick={() => { setShowCounselorStudio(true); setStudioTab('forge'); }}
+                  className="px-3 py-1.5 text-xs font-bold bg-amber-700 text-white rounded-lg"
+                >
+                  Open Studio
+                </button>
+              </div>
               <div className="mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-3">
                   <Wand2 className="text-purple-600" size={18} /> Forge New Wellness Quest
@@ -1112,6 +2151,504 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           onSubmit={handleConsentSignAndConfirm}
           user={studentForConsent ?? undefined}
         />
+      )}
+
+      {/* Counselor Studio Modal */}
+      {showCounselorStudio && (
+        <div className="fixed inset-0 z-[220] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-slate-800">Counselor Studio</h2>
+                <p className="text-xs text-slate-500">Email, reports, forge, tasks, and reminders in one place</p>
+              </div>
+              <button onClick={() => setShowCounselorStudio(false)} className="p-2 rounded-full hover:bg-white transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex gap-2 px-5 py-3 border-b border-slate-100 bg-white">
+              {([
+                { id: 'email', label: 'Email' },
+                { id: 'reports', label: 'Reports' },
+                { id: 'forge', label: 'Forge' },
+                { id: 'tasks', label: 'Tasks' },
+                { id: 'alerts', label: 'Alerts' },
+              ] as { id: typeof studioTab; label: string }[]).map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setStudioTab(tab.id)}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-full border transition-colors ${studioTab === tab.id
+                    ? 'bg-[#8a6b5c] text-white border-[#8a6b5c]'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-[#8a6b5c]'} `}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {studioTab === 'email' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-1 space-y-3">
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                      <p className="text-xs font-bold text-slate-600 mb-2">Target</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setEmailTarget('student')}
+                          className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border ${emailTarget === 'student' ? 'bg-[#8a6b5c] text-white border-[#8a6b5c]' : 'bg-white text-slate-500 border-slate-200'}`}
+                        >
+                          Student
+                        </button>
+                        <button
+                          onClick={() => setEmailTarget('group')}
+                          className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border ${emailTarget === 'group' ? 'bg-[#8a6b5c] text-white border-[#8a6b5c]' : 'bg-white text-slate-500 border-slate-200'}`}
+                        >
+                          Group
+                        </button>
+                      </div>
+                      {emailTarget === 'group' && (
+                        <select
+                          value={emailGroupId}
+                          onChange={(e) => setEmailGroupId(e.target.value)}
+                          className="w-full mt-3 border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                        >
+                          <option value="">Select program group</option>
+                          {programGroups.map(group => (
+                            <option key={group.id} value={group.id}>{group.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-200 p-3">
+                      <p className="text-xs font-bold text-slate-600 mb-2">Threads</p>
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {emailThreads.map(thread => {
+                          const student = visibleStudents.find(s => (s.casefileId || s.id) === thread.studentId);
+                          return (
+                            <button
+                              key={thread.id}
+                              onClick={() => setSelectedEmailThreadId(thread.id)}
+                              className={`w-full text-left p-2 rounded-lg border ${selectedEmailThreadId === thread.id ? 'border-[#8a6b5c] bg-[#f7f0eb]' : 'border-slate-200 bg-white'}`}
+                            >
+                              <p className="text-xs font-bold text-slate-700 truncate">{student?.name || thread.studentId}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{thread.subject}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 flex flex-col gap-4">
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs font-bold text-slate-600 mb-2">Compose</p>
+                      <input
+                        value={emailSubject}
+                        onChange={(e) => setEmailSubject(e.target.value)}
+                        placeholder={selectedEmailThread?.subject || 'Subject'}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs mb-2"
+                      />
+                      <textarea
+                        value={emailBody}
+                        onChange={(e) => setEmailBody(e.target.value)}
+                        rows={4}
+                        placeholder="Write your email here..."
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                      />
+                      <div className="flex justify-between mt-3">
+                        <button
+                          onClick={() => selectedEmailThreadId && handleSimulateReply(selectedEmailThreadId)}
+                          className="px-3 py-2 text-xs font-bold border border-slate-200 rounded-lg text-slate-500"
+                        >
+                          Simulate Reply
+                        </button>
+                        <button
+                          onClick={handleSendEmail}
+                          className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg"
+                        >
+                          Send Email
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs font-bold text-slate-600 mb-3">Thread</p>
+                      <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {selectedEmailThread?.messages.map(msg => (
+                          <div key={msg.id} className={`p-3 rounded-xl text-xs ${msg.direction === 'sent' ? 'bg-[#8a6b5c] text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
+                            <div className="flex justify-between mb-1">
+                              <span className="font-bold">{msg.senderName}</span>
+                              <span className="text-[10px] opacity-70">{new Date(msg.timestamp).toLocaleString()}</span>
+                            </div>
+                            <p>{msg.body}</p>
+                          </div>
+                        ))}
+                        {selectedEmailThread?.messages.length === 0 && (
+                          <p className="text-center text-xs text-slate-400">No messages yet.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {studioTab === 'reports' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs font-bold text-slate-600 mb-2">Generate Report</p>
+                      <div className="text-xs text-slate-500 mb-2">Student: {selectedStudentRecord?.name || 'Select a student'}</div>
+                      <select
+                        value={reportTemplateId}
+                        onChange={(e) => setReportTemplateId(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                      >
+                        {reportTemplates.map(t => (
+                          <option key={t.id} value={t.id}>{t.title}</option>
+                        ))}
+                      </select>
+                      <div className="mt-3">
+                        <label className="text-[10px] text-slate-500 font-bold uppercase">Add snippet</label>
+                        <div className="flex gap-2 mt-1">
+                          <input
+                            value={reportSnippetInput}
+                            onChange={(e) => setReportSnippetInput(e.target.value)}
+                            className="flex-1 border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                            placeholder="Short observation or quote"
+                          />
+                          <button onClick={handleAddSnippet} className="px-3 py-2 text-xs font-bold bg-slate-100 rounded-lg">Add</button>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          {(selectedStudent && reportSnippets[selectedStudent] || []).map((snippet, i) => (
+                            <div key={`${snippet}-${i}`} className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                              {snippet}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 mt-3 text-xs text-slate-500">
+                        <input type="checkbox" checked={sendToSupervisor} onChange={(e) => setSendToSupervisor(e.target.checked)} />
+                        Send to Supervisor / Associate Dean (mock)
+                      </label>
+                      <button onClick={handleGenerateReport} className="w-full mt-3 bg-[#8a6b5c] text-white text-xs font-bold py-2 rounded-lg">
+                        Generate Report
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
+                    <p className="text-xs font-bold text-slate-600 mb-2">Report Preview</p>
+                    {generatedReport ? (
+                      <div className="space-y-3 text-xs text-slate-700">
+                        <div>
+                          <p className="font-bold text-slate-600">Current State</p>
+                          <p>{generatedReport.currentState}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-600">Concerns</p>
+                          <p>{generatedReport.concerns}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-600">Suggested Actions</p>
+                          <p>{generatedReport.actions}</p>
+                        </div>
+                        {generatedReport.surveySummary && (
+                          <div>
+                            <p className="font-bold text-slate-600">Survey Summary</p>
+                            <p>{generatedReport.surveySummary}</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-bold text-slate-600">Snippets</p>
+                          <ul className="list-disc ml-4">
+                            {generatedReport.snippets.map((s, i) => (
+                              <li key={`${s}-${i}`}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">Generate a report to preview it here.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {studioTab === 'forge' && (
+                <div className="space-y-6">
+                  <div className="flex gap-2 text-xs font-bold">
+                    {['upload', 'review', 'assign', 'results'].map(step => (
+                      <button
+                        key={step}
+                        onClick={() => setForgeStep(step as any)}
+                        className={`px-3 py-1.5 rounded-full border ${forgeStep === step ? 'bg-[#8a6b5c] text-white border-[#8a6b5c]' : 'bg-white text-slate-500 border-slate-200'}`}
+                      >
+                        {step}
+                      </button>
+                    ))}
+                  </div>
+
+                  {forgeStep === 'upload' && (
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+                      <input
+                        type="text"
+                        value={forgeTitle}
+                        onChange={(e) => setForgeTitle(e.target.value)}
+                        placeholder="Survey title"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                      />
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => handleForgeFileChange(e.target.files?.[0] || null)}
+                        className="w-full text-xs"
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        PDF text is extracted automatically for question generation.
+                      </p>
+                      {forgeExtractError && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 text-[11px] px-3 py-2">
+                          {forgeExtractError}
+                        </div>
+                      )}
+                      <button
+                        onClick={handleForgeExtract}
+                        disabled={isForgeExtracting}
+                        className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isForgeExtracting ? 'Processing PDF...' : 'Extract Questions (RAG + LLM)'}
+                      </button>
+                    </div>
+                  )}
+
+                  {forgeStep === 'review' && (
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+                      {forgeQuestions.map(q => (
+                        <div key={q.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                          <input
+                            value={q.text}
+                            onChange={(e) => setForgeQuestions(prev => prev.map(item => item.id === q.id ? { ...item, text: e.target.value } : item))}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                          />
+                          <div className="flex gap-2 items-center">
+                            <span className="text-[10px] text-slate-500">Scale</span>
+                            <select
+                              value={q.scale}
+                              onChange={(e) => handleForgeScaleChange(q.id, Number(e.target.value))}
+                              className="border border-slate-200 rounded px-2 py-1 text-xs"
+                            >
+                              {[3, 5, 7].map(scale => (<option key={scale} value={scale}>{scale}-point</option>))}
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {q.meanings.map((meaning, idx) => (
+                              <input
+                                key={`${q.id}-${idx}`}
+                                value={meaning}
+                                onChange={(e) => setForgeQuestions(prev => prev.map(item => item.id === q.id
+                                  ? { ...item, meanings: item.meanings.map((m, i) => i === idx ? e.target.value : m) }
+                                  : item
+                                ))}
+                                className="border border-slate-200 rounded px-2 py-1 text-[11px]"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <button onClick={() => setForgeStep('assign')} className="px-4 py-2 text-xs font-bold bg-slate-800 text-white rounded-lg">
+                        Continue to Assign
+                      </button>
+                    </div>
+                  )}
+
+                  {forgeStep === 'assign' && (
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setForgeAssignTarget('student')}
+                          className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border ${forgeAssignTarget === 'student' ? 'bg-[#8a6b5c] text-white border-[#8a6b5c]' : 'bg-white text-slate-500 border-slate-200'}`}
+                        >
+                          Student
+                        </button>
+                        <button
+                          onClick={() => setForgeAssignTarget('group')}
+                          className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border ${forgeAssignTarget === 'group' ? 'bg-[#8a6b5c] text-white border-[#8a6b5c]' : 'bg-white text-slate-500 border-slate-200'}`}
+                        >
+                          Group
+                        </button>
+                      </div>
+                      {forgeAssignTarget === 'group' && (
+                        <select
+                          value={forgeAssignGroupId}
+                          onChange={(e) => setForgeAssignGroupId(e.target.value)}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                        >
+                          <option value="">Select program group</option>
+                          {programGroups.map(group => (
+                            <option key={group.id} value={group.id}>{group.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      {forgeAssignTarget === 'student' && (
+                        <p className="text-xs text-slate-500">Assigning to: {selectedStudentRecord?.name || 'Select a student'}</p>
+                      )}
+                      <button onClick={handleCreateSurvey} className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg">
+                        Create Survey
+                      </button>
+                    </div>
+                  )}
+
+                  {forgeStep === 'results' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        {forgeSurveys.length === 0 && (
+                          <p className="text-xs text-slate-400">No surveys created yet.</p>
+                        )}
+                        {forgeSurveys.map(survey => (
+                          <div key={survey.id} className={`border rounded-xl p-3 ${selectedSurveyId === survey.id ? 'border-[#8a6b5c] bg-[#f7f0eb]' : 'border-slate-200 bg-white'}`}>
+                            <div className="flex justify-between">
+                              <div>
+                                <p className="text-sm font-bold text-slate-700">{survey.title}</p>
+                                <p className="text-[10px] text-slate-500">Assigned to {survey.assignedTo.map(a => a.name).join(', ') || 'none'}</p>
+                              </div>
+                              <button onClick={() => setSelectedSurveyId(survey.id)} className="text-xs text-slate-500">View</button>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <button onClick={() => handleSimulateResponses(survey)} className="px-3 py-1.5 text-xs font-bold bg-slate-100 rounded-lg">Simulate Responses</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <p className="text-xs font-bold text-slate-600 mb-2">Survey Results</p>
+                        {selectedSurveyId ? (
+                          <div className="space-y-2">
+                            {forgeResponses.filter(r => r.surveyId === selectedSurveyId).map(resp => {
+                              const student = visibleStudents.find(s => (s.casefileId || s.id) === resp.studentId);
+                              const avg = resp.answers.length
+                                ? (resp.answers.reduce((acc, a) => acc + a.score, 0) / resp.answers.length).toFixed(1)
+                                : '0';
+                              return (
+                                <div key={resp.id} className="bg-white border border-slate-200 rounded-lg p-2 text-xs">
+                                  <p className="font-bold text-slate-700">{student?.name || resp.studentId}</p>
+                                  <p className="text-[11px] text-slate-500">Avg score: {avg} | {new Date(resp.submittedAt).toLocaleString()}</p>
+                                </div>
+                              );
+                            })}
+                            <button onClick={handleSendSurveyToChat} className="mt-2 px-3 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg">
+                              Send Summary to Chat
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">Select a survey to see responses.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {studioTab === 'tasks' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+                    <p className="text-xs font-bold text-slate-600">Assign Task</p>
+                    <p className="text-xs text-slate-500">Student: {selectedStudentRecord?.name || 'Select a student'}</p>
+                    <input
+                      value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                      placeholder="Task title"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                    />
+                    <textarea
+                      value={taskDescription}
+                      onChange={(e) => setTaskDescription(e.target.value)}
+                      placeholder="Task details"
+                      rows={3}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={taskDueDate}
+                      onChange={(e) => setTaskDueDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                    />
+                    <button onClick={handleCreateTask} className="w-full bg-[#8a6b5c] text-white text-xs font-bold py-2 rounded-lg">
+                      Assign Task
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
+                    <p className="text-xs font-bold text-slate-600 mb-2">Task Tracker</p>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {counselorTasks.filter(t => t.studentId === selectedStudent).map(task => {
+                        const status = getTaskStatus(task);
+                        return (
+                          <div key={task.id} className="bg-white border border-slate-200 rounded-lg p-3 text-xs">
+                            <div className="flex justify-between">
+                              <p className="font-bold text-slate-700">{task.title}</p>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status === 'completed' ? 'bg-emerald-100 text-emerald-700' : status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{status}</span>
+                            </div>
+                            <p className="text-[10px] text-slate-500">Assigned: {new Date(task.assignedAt).toLocaleDateString()} | Due: {new Date(task.dueAt).toLocaleDateString()}</p>
+                            {!task.completedAt && (
+                              <button onClick={() => markTaskCompleted(task.id)} className="mt-2 px-2 py-1 text-[10px] font-bold bg-slate-100 rounded-lg">
+                                Mark Completed
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {counselorTasks.filter(t => t.studentId === selectedStudent).length === 0 && (
+                        <p className="text-xs text-slate-400">No tasks assigned yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {studioTab === 'alerts' && (
+                <div className="space-y-4">
+                  {buildReminderItems().length === 0 ? (
+                    <p className="text-xs text-slate-400">No reminders at the moment.</p>
+                  ) : (
+                    buildReminderItems().map(reminder => {
+                      const student = visibleStudents.find(s => (s.casefileId || s.id) === reminder.studentId);
+                      return (
+                        <div key={reminder.id} className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs">
+                          <div>
+                            <p className="font-bold text-slate-700">{student?.name || reminder.studentId}</p>
+                            <p className="text-[11px] text-slate-500">{reminder.message}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                const thread = emailThreads.find(t => t.studentId === reminder.studentId);
+                                if (thread) {
+                                  sendEmailToThread(thread.id, `Reminder: ${reminder.message}`, 'Reminder');
+                                  addNotification('Email reminder sent (mock).', 'success');
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold bg-slate-100 rounded-lg"
+                            >
+                              Send Email
+                            </button>
+                            <button
+                              onClick={() => addNotification(reminder.message, 'info')}
+                              className="px-3 py-1.5 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg"
+                            >
+                              Add Alert
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Task Modal */}

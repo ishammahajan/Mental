@@ -24,6 +24,8 @@ import {
 import { db } from './firebaseConfig';
 import { AppointmentSlot } from '../types';
 import { analyzeMentalHealthText } from './mentalHealthSentimentService';
+import { isDemoMode } from './demoMode';
+import * as storage from './storage';
 
 const SLOTS_COL = 'slots';
 
@@ -73,6 +75,9 @@ const isSlotValid = (slot: AppointmentSlot): boolean => {
  * Used by both StudentDashboard and CounselorDashboard on mount.
  */
 export const getSlots = async (): Promise<AppointmentSlot[]> => {
+    if (isDemoMode()) {
+        return storage.getSlots();
+    }
     const q = query(collection(db, SLOTS_COL), orderBy('createdAt', 'asc'));
     const snap = await getDocs(q);
     const slots: AppointmentSlot[] = snap.docs.map(d => ({
@@ -86,6 +91,11 @@ export const getSlots = async (): Promise<AppointmentSlot[]> => {
  * Creates a new slot in Firestore (counselor only).
  */
 export const createSlot = async (slot: Omit<AppointmentSlot, 'id'>): Promise<string> => {
+    if (isDemoMode()) {
+        const newSlot: AppointmentSlot = { ...slot, id: `demo_slot_${Date.now()}` };
+        await storage.createSlot(newSlot);
+        return newSlot.id;
+    }
     const docRef = await addDoc(collection(db, SLOTS_COL), {
         ...slot,
         status: 'open',
@@ -105,6 +115,9 @@ export const requestSlot = async (
     studentName: string,
     intakeText?: string
 ): Promise<boolean> => {
+    if (isDemoMode()) {
+        return storage.requestSlot(slotId, studentId, studentName);
+    }
     try {
         let priority: 'normal' | 'high' = 'normal';
 
@@ -138,6 +151,10 @@ export const updateSlotStatus = async (
     slotId: string,
     status: 'confirmed' | 'open'
 ): Promise<void> => {
+    if (isDemoMode()) {
+        await storage.updateSlotStatus(slotId, status);
+        return;
+    }
     const ref = doc(db, SLOTS_COL, slotId);
     if (status === 'open') {
         await updateDoc(ref, {
@@ -155,6 +172,10 @@ export const updateSlotStatus = async (
  * Deletes a slot permanently (counselor only).
  */
 export const deleteSlot = async (slotId: string): Promise<void> => {
+    if (isDemoMode()) {
+        await storage.deleteSlot(slotId);
+        return;
+    }
     await deleteDoc(doc(db, SLOTS_COL, slotId));
 };
 
@@ -166,6 +187,12 @@ export const updateSlot = async (
     slotId: string,
     updates: Partial<Pick<AppointmentSlot, 'date' | 'time' | 'counselorName'>>
 ): Promise<void> => {
+    if (isDemoMode()) {
+        const slots = await storage.getSlots();
+        const updated = slots.map(slot => slot.id === slotId ? { ...slot, ...updates } : slot);
+        localStorage.setItem('speakup_cloud_slots', JSON.stringify(updated));
+        return;
+    }
     await updateDoc(doc(db, SLOTS_COL, slotId), {
         ...updates,
         updatedAt: serverTimestamp(),
@@ -188,6 +215,12 @@ export const updateSlot = async (
  * }, []);
  */
 export const subscribeToSlots = (callback: (slots: AppointmentSlot[]) => void): Unsubscribe => {
+    if (isDemoMode()) {
+        const emit = async () => callback(await storage.getSlots());
+        emit();
+        const interval = setInterval(emit, 4000);
+        return () => clearInterval(interval);
+    }
     const q = query(collection(db, SLOTS_COL), orderBy('createdAt', 'asc'));
     return onSnapshot(q, snap => {
         const slots: AppointmentSlot[] = snap.docs.map(d => ({

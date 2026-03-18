@@ -3,6 +3,8 @@ import { User } from '../types';
 import { signInWithGoogle, signInWithEmailPassword } from '../services/authService';
 import { getOrCreateUserProfile } from '../services/userService';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { isDemoMode } from '../services/demoMode';
+import { signInAsDemoRole } from '../services/demoAuthService';
 
 interface Props {
   onLogin: (user: User) => void;
@@ -24,6 +26,7 @@ type Step = 'splash' | 'form';
 const LoginScreen: React.FC<Props> = ({ onLogin }) => {
   const [step, setStep] = useState<Step>('splash');
   const [tab, setTab] = useState<LoginTab>('student');
+  const demoMode = isDemoMode();
 
   // Google tab state
   const [googleError, setGoogleError] = useState('');
@@ -109,6 +112,32 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         {/* Title */}
         <h2 className="text-2xl font-bold text-[var(--color-text)] mb-1 text-center">Welcome to SPeakUp</h2>
         <p className="text-center text-[var(--color-text-secondary)] text-xs mb-6">Sign in with your SPJIMR account</p>
+
+        {demoMode && (
+          <div className="mb-6 rounded-2xl border border-[var(--border-subtle)] bg-[#f1e6df] p-4 text-center">
+            <p className="text-xs font-semibold text-[var(--color-text)] mb-3">Demo mode enabled</p>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => onLogin(signInAsDemoRole('student'))}
+                className="ui-btn-primary py-2 text-xs font-bold"
+              >
+                Continue as Student Demo
+              </button>
+              <button
+                onClick={() => onLogin(signInAsDemoRole('counselor'))}
+                className="ui-btn-secondary py-2 text-xs font-bold"
+              >
+                Continue as Counselor Demo
+              </button>
+              <button
+                onClick={() => onLogin(signInAsDemoRole('admin'))}
+                className="ui-btn-secondary py-2 text-xs font-bold"
+              >
+                Continue as Admin Demo
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tab switcher */}
         <div className="flex rounded-2xl p-1 mb-6 gap-1 bg-[var(--color-elevated)] border border-[var(--border-subtle)]">

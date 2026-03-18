@@ -15,6 +15,7 @@ import {
     User as FirebaseUser,
 } from 'firebase/auth';
 import { auth } from './firebaseConfig';
+import { isDemoMode } from './demoMode';
 
 const ALLOWED_DOMAIN = '@spjimr.org';
 
@@ -27,6 +28,9 @@ provider.setCustomParameters({ prompt: 'select_account' });
  * If the account is not @spjimr.org, signs the user out and throws an error.
  */
 export const signInWithGoogle = async (): Promise<FirebaseUser> => {
+    if (isDemoMode()) {
+        throw new Error('Demo mode is enabled. Use the demo sign-in buttons instead.');
+    }
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
@@ -47,6 +51,9 @@ export const signInWithEmailPassword = async (
     email: string,
     password: string
 ): Promise<FirebaseUser> => {
+    if (isDemoMode()) {
+        throw new Error('Demo mode is enabled. Use the demo sign-in buttons instead.');
+    }
     if (!email.endsWith(ALLOWED_DOMAIN)) {
         throw new Error(`Access restricted. Only ${ALLOWED_DOMAIN} accounts are allowed.`);
     }
@@ -70,6 +77,7 @@ export const signInWithEmailPassword = async (
  * Clears the local session — LoginScreen will be shown on next load.
  */
 export const signOut = async (): Promise<void> => {
+    if (isDemoMode()) return;
     await firebaseSignOut(auth);
 };
 
@@ -83,7 +91,13 @@ export const signOut = async (): Promise<void> => {
  */
 export const onAuthChange = (
     callback: (user: FirebaseUser | null) => void
-): (() => void) => onAuthStateChanged(auth, callback);
+): (() => void) => {
+    if (isDemoMode()) {
+        callback(null);
+        return () => {};
+    }
+    return onAuthStateChanged(auth, callback);
+};
 
 /**
  * Returns the currently signed-in Firebase user, or null.

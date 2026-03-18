@@ -10,6 +10,10 @@ import { SParshProvider } from './contexts/SParshContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { onAuthChange } from './services/authService';
 import { getOrCreateUserProfile } from './services/userService';
+import { isDemoMode, setDemoMode } from './services/demoMode';
+import { ensureDemoSeeded } from './services/storage';
+import { ensureCounselorStudioSeeded } from './services/counselorStudioService';
+import { getDemoSessionUser, signOutDemo } from './services/demoAuthService';
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
@@ -17,12 +21,28 @@ export default function App() {
   const [isCrisisMode, setIsCrisisMode] = useState(false);
   // Loading state while Firebase resolves the session on page load
   const [authLoading, setAuthLoading] = useState(true);
+  const demoMode = isDemoMode();
 
   // ── Session restore via Firebase onAuthStateChanged ─────────────────────────
   // Fires automatically on page load:
   //   • If user was previously logged in → Firebase returns the cached user
   //   • If not → user is null → show LoginScreen
   useEffect(() => {
+    if (demoMode) {
+      ensureDemoSeeded();
+      ensureCounselorStudioSeeded();
+      const demoUser = getDemoSessionUser();
+      if (demoUser) {
+        setUser(demoUser);
+        setCurrentRole(demoUser.role);
+      } else {
+        setUser(null);
+        setCurrentRole(null);
+      }
+      setAuthLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthChange(async (fbUser) => {
       if (fbUser) {
         try {
@@ -43,7 +63,7 @@ export default function App() {
 
     // Clean up listener when App unmounts
     return () => unsubscribe();
-  }, []);
+  }, [demoMode]);
 
   // Called by LoginScreen after a fresh Google Sign-In
   // (onAuthChange will also fire, but this makes the transition instant)
@@ -55,14 +75,24 @@ export default function App() {
   // Called by dashboards when user logs out (authService.signOut was called)
   // onAuthChange will fire and clear the state, but this handles optimistic UI
   const handleLogout = () => {
+    if (demoMode) {
+      signOutDemo();
+    }
     setUser(null);
     setCurrentRole(null);
   };
 
   // Check for API Key at the top level
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    return <NoApiKeyFallback />;
+  if (!apiKey && !demoMode) {
+    return (
+      <NoApiKeyFallback
+        onEnableDemo={() => {
+          setDemoMode(true);
+          window.location.reload();
+        }}
+      />
+    );
   }
 
   // While Firebase is checking the session, show a minimal loading screen

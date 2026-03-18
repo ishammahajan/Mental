@@ -1,4 +1,14 @@
 import { User, Role, Message, AppointmentSlot, WellnessTask, WellnessLeave, JournalEntry, P2PMessage, ConsentData } from '../types';
+import {
+  DEMO_CHAT_HISTORY,
+  DEMO_CONSENTS,
+  DEMO_JOURNALS,
+  DEMO_P2P_MESSAGES,
+  DEMO_POSTS,
+  DEMO_SLOTS,
+  DEMO_TASKS_BY_EMAIL,
+  DEMO_USERS,
+} from '../data/demoData';
 import { encryptData, decryptData } from '../utils/encryption';
 
 const CLOUD_KEYS = {
@@ -30,6 +40,33 @@ const cloudSet = (key: string, data: any) => {
   localStorage.setItem(key, JSON.stringify(data));
   // Broadcast to all tabs (including self) so UIs update instantly
   syncChannel?.postMessage({ key });
+};
+
+const DEMO_SEED_KEY = 'speakup_demo_seeded';
+
+const seedIfMissing = (key: string, value: unknown) => {
+  if (localStorage.getItem(key) === null) {
+    cloudSet(key, value);
+  }
+};
+
+export const ensureDemoSeeded = (): void => {
+  try {
+    if (localStorage.getItem(DEMO_SEED_KEY) === 'true') return;
+
+    seedIfMissing(CLOUD_KEYS.USERS, DEMO_USERS);
+    seedIfMissing(CLOUD_KEYS.CHATS, DEMO_CHAT_HISTORY);
+    seedIfMissing(CLOUD_KEYS.TASKS, DEMO_TASKS_BY_EMAIL);
+    seedIfMissing(CLOUD_KEYS.SLOTS, DEMO_SLOTS);
+    seedIfMissing(CLOUD_KEYS.JOURNALS, DEMO_JOURNALS);
+    seedIfMissing(CLOUD_KEYS.CONSENTS, DEMO_CONSENTS);
+    seedIfMissing(CLOUD_KEYS.P2P_MSGS, DEMO_P2P_MESSAGES);
+    seedIfMissing(POSTS_KEY, DEMO_POSTS);
+
+    localStorage.setItem(DEMO_SEED_KEY, 'true');
+  } catch {
+    // Ignore localStorage failures in demo environments.
+  }
 };
 
 

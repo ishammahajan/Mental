@@ -1,6 +1,10 @@
 import React from 'react';
 
-export default function NoApiKeyFallback() {
+interface NoApiKeyFallbackProps {
+  onEnableDemo?: () => void;
+}
+
+export default function NoApiKeyFallback({ onEnableDemo }: NoApiKeyFallbackProps) {
   return (
     <div style={{
       minHeight: '100vh',
@@ -45,6 +49,23 @@ export default function NoApiKeyFallback() {
             aistudio.google.com
           </a>
         </p>
+        {onEnableDemo && (
+          <button
+            onClick={onEnableDemo}
+            style={{
+              marginTop: '16px',
+              padding: '10px 16px',
+              borderRadius: '10px',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--color-primary)',
+              color: '#fff',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Continue in Demo Mode
+          </button>
+        )}
       </div>
     </div>
   );

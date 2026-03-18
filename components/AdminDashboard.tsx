@@ -8,6 +8,8 @@ import { subscribeToSlots } from '../services/slotService';
 import { collection, getDocs, onSnapshot } from 'firebase/firestore';
 import { db as firestoreDb } from '../services/firebaseConfig';
 import { AppointmentSlot } from '../types';
+import { isDemoMode } from '../services/demoMode';
+import { DEMO_USERS } from '../data/demoData';
 
 interface AdminProps { onLogout?: () => void; }
 
@@ -22,6 +24,7 @@ interface LiveStats {
 }
 
 const AdminDashboard: React.FC<AdminProps> = ({ onLogout }) => {
+  const demoMode = isDemoMode();
   const [metric, setMetric] = useState('stress');
   const [dimension, setDimension] = useState('program');
   const [chartType, setChartType] = useState('bar');
@@ -39,6 +42,18 @@ const AdminDashboard: React.FC<AdminProps> = ({ onLogout }) => {
 
   // Listen to Firestore users collection for live role counts
   useEffect(() => {
+    if (demoMode) {
+      const students = DEMO_USERS.filter(u => u.role === 'student').length;
+      const counselors = DEMO_USERS.filter(u => u.role === 'counselor').length;
+      const admins = DEMO_USERS.filter(u => u.role === 'admin').length;
+      setRoleChart([
+        { name: 'Students', value: students },
+        { name: 'Counselors', value: counselors },
+        { name: 'Admins', value: admins },
+      ]);
+      setLiveStats(prev => ({ ...prev, totalStudents: students, totalCounselors: counselors, totalAdmins: admins }));
+      return;
+    }
     const unsub = onSnapshot(collection(firestoreDb, 'users'), snap => {
       const users = snap.docs.map(d => d.data() as any);
       const students = users.filter(u => u.role === 'student').length;
@@ -52,7 +67,7 @@ const AdminDashboard: React.FC<AdminProps> = ({ onLogout }) => {
       setLiveStats(prev => ({ ...prev, totalStudents: students, totalCounselors: counselors, totalAdmins: admins }));
     });
     return () => unsub();
-  }, []);
+  }, [demoMode]);
 
   // Listen to Firestore slots for live booking stats
   useEffect(() => {

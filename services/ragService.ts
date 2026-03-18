@@ -1,5 +1,7 @@
 
 
+import { isDemoMode } from './demoMode';
+
 const API_BASE = 'http://localhost:3001/api/rag';
 
 export interface GameMetadata {
@@ -11,6 +13,9 @@ export interface GameMetadata {
 }
 
 export const uploadGamePDF = async (file: File, gameId: string, title: string, paradigm: string) => {
+    if (isDemoMode()) {
+        return { ok: true, id: gameId, title, paradigm };
+    }
     const formData = new FormData();
     formData.append('pdf', file);
     formData.append('gameId', gameId);
@@ -27,6 +32,10 @@ export const uploadGamePDF = async (file: File, gameId: string, title: string, p
 };
 
 export const generateGameElements = async (gameId: string, userInput: string, type: 'ingredients' | 'threads') => {
+    if (isDemoMode()) {
+        if (type === 'ingredients') return ["Deep breathing", "5-4-3-2-1 grounding", "Short walk"];
+        return ["Call a trusted friend", "Plan a 10-min recharge break"];
+    }
     const res = await fetch(`${API_BASE}/generate-elements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -46,6 +55,17 @@ export const generateGameElements = async (gameId: string, userInput: string, ty
 };
 
 export const getForgedGames = async (): Promise<Record<string, GameMetadata>> => {
+    if (isDemoMode()) {
+        return {
+            demo_game_1: {
+                title: 'Focus Recovery',
+                paradigm: 'Resource Gathering',
+                createdAt: new Date(Date.now() - 86400000 * 6).toISOString(),
+                totalUsers: 12,
+                avgCompletionTime: 9,
+            },
+        };
+    }
     try {
         const res = await fetch(`${API_BASE}/games`);
         if (!res.ok) return {};

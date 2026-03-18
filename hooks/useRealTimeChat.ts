@@ -44,6 +44,8 @@ export function useRealTimeChat({
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  const lastMessageTimestampRef = useRef<string | null>(null);
+  const pollingStartedRef = useRef(false);
 
   // ─── WebSocket Connection ──────────────────────────────────────────
   useEffect(() => {
@@ -87,12 +89,14 @@ export function useRealTimeChat({
             switch (data.type) {
               case 'MESSAGE_HISTORY':
                 setMessages(data.messages || []);
-                lastMessageIdRef.current = data.messages?.[data.messages.length - 1]?.id;
+                lastMessageIdRef.current = data.messages?.[data.messages.length - 1]?.id || null;
+                lastMessageTimestampRef.current = data.messages?.[data.messages.length - 1]?.timestamp || null;
                 break;
 
               case 'NEW_MESSAGE':
                 setMessages(prev => [...prev, data.message]);
                 lastMessageIdRef.current = data.message.id;
+                lastMessageTimestampRef.current = data.message.timestamp;
 
                 // Auto-mark as read if enabled
                 if (autoMarkRead && data.message.senderId !== userId && !data.message.isRead) {
@@ -154,14 +158,15 @@ export function useRealTimeChat({
 
           // Only update if messages changed
           if (freshMessages.length > 0) {
-            const lastLocalId = lastMessageIdRef.current;
+            const lastLocalTs = lastMessageTimestampRef.current;
             const newMessages = freshMessages.filter(
-              m => !lastLocalId || new Date(m.timestamp) > new Date(lastMessageIdRef.current || 0)
+              m => !lastLocalTs || new Date(m.timestamp) > new Date(lastLocalTs)
             );
 
             if (newMessages.length > 0) {
               setMessages(freshMessages);
               lastMessageIdRef.current = freshMessages[freshMessages.length - 1].id;
+              lastMessageTimestampRef.current = freshMessages[freshMessages.length - 1].timestamp;
 
               // Auto-mark as read
               if (autoMarkRead) {
@@ -195,8 +200,6 @@ export function useRealTimeChat({
         pollingStartedRef.current = true;
       }
     }, 3000);
-
-    const pollingStartedRef = useRef(false);
 
     return () => {
       clearTimeout(fallbackTimer);

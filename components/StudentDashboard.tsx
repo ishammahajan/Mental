@@ -10,7 +10,20 @@ import MarkdownRenderer from './MarkdownRenderer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sendMessageToSParsh } from '../services/geminiService';
 import { analyzeSentimentAndSchedule } from '../services/sentimentAgent';
-import { Message, WellnessTask, AppointmentSlot, P2PMessage, ConsentData, User, WellnessPost } from '../types';
+import {
+  CounselorEmailThread,
+  CounselorReport,
+  CounselorTaskItem,
+  ForgeResponse,
+  ForgeSurvey,
+  Message,
+  WellnessTask,
+  AppointmentSlot,
+  P2PMessage,
+  ConsentData,
+  User,
+  WellnessPost,
+} from '../types';
 import ConsentForm from './ConsentForm';
 import * as db from '../services/storage';
 import * as chat from '../services/chatService';
@@ -23,6 +36,16 @@ import { COUNSELORS } from '../constants';
 import { getForgedGames, GameMetadata } from '../services/ragService';
 import { detectCrisisInText } from '../services/aiService';
 import { getSlots, requestSlot as firestoreRequestSlot, updateSlotStatus as firestoreUpdateSlotStatus, subscribeToSlots } from '../services/slotService';
+import {
+  saveForgeResponse,
+  subscribeCounselorTasksForStudent,
+  subscribeEmailThreadsForStudent,
+  subscribeForgeResponsesForStudent,
+  subscribeForgeSurveysForStudent,
+  subscribeReportsForStudent,
+  updateCounselorTaskCompletion,
+  upsertEmailThread,
+} from '../services/counselorStudioService';
 
 interface Props {
   triggerCrisis: () => void;
@@ -129,7 +152,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     return namePart.charAt(0).toUpperCase() + namePart.slice(1);
   })();
 
-  const [activeTab, setActiveTab] = useState<'home' | 'tasks' | 'booking' | 'journal'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'tasks' | 'booking' | 'journal' | 'inbox' | 'surveys' | 'reports'>('home');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -197,6 +220,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   };
 
   const [tasks, setTasks] = useState<WellnessTask[]>([]);
+  const [counselorTasksSync, setCounselorTasksSync] = useState<CounselorTaskItem[]>([]);
+  const [emailThreads, setEmailThreads] = useState<CounselorEmailThread[]>([]);
+  const [selectedEmailThreadId, setSelectedEmailThreadId] = useState<string | null>(null);
+  const [emailReply, setEmailReply] = useState('');
+  const [assignedSurveys, setAssignedSurveys] = useState<ForgeSurvey[]>([]);
+  const [surveyResponses, setSurveyResponses] = useState<ForgeResponse[]>([]);
+  const [surveyDrafts, setSurveyDrafts] = useState<Record<string, Record<string, number>>>({});
+  const [reports, setReports] = useState<CounselorReport[]>([]);
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot | null>(null);
@@ -210,6 +241,8 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   const [p2pMessages, setP2PMessages] = useState<P2PMessage[]>([]);
   const [p2pInput, setP2PInput] = useState('');
   const [unreadP2P, setUnreadP2P] = useState(0);
+  const selectedEmailThread = emailThreads.find(t => t.id === selectedEmailThreadId) || null;
+  const studentProgram = user.program || undefined;
 
   // Wall feed posts
   const [posts, setPosts] = useState<WellnessPost[]>([]);
@@ -238,6 +271,13 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   // Follow-up nudge (Feature 5)
   const [showFollowUpNudge, setShowFollowUpNudge] = useState(false);
   const [followUpDays, setFollowUpDays] = useState(0);
+  const activeCounselorTasks = counselorTasksSync.filter(task => !task.completedAt);
+  const totalActiveTasks = tasks.filter(t => t.assignedBy !== 'system' && !t.isCompleted).length + activeCounselorTasks.length;
+  const sortedEmailThreads = [...emailThreads].sort((a, b) => {
+    const aTime = new Date(a.updatedAt || a.messages[a.messages.length - 1]?.timestamp || 0).getTime();
+    const bTime = new Date(b.updatedAt || b.messages[b.messages.length - 1]?.timestamp || 0).getTime();
+    return bTime - aTime;
+  });
 
   // ── Clear SParsh history on logout or tab close ───────────────────────────
   useEffect(() => {
@@ -375,6 +415,34 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     return () => unsub();
   }, [userId]);
 
+  useEffect(() => {
+    const unsubThreads = subscribeEmailThreadsForStudent(userId, (threads) => {
+      setEmailThreads(threads);
+      if (!selectedEmailThreadId && threads.length > 0) {
+        setSelectedEmailThreadId(threads[0].id);
+      }
+    });
+    const unsubSurveys = subscribeForgeSurveysForStudent(userId, studentProgram, (surveys) => {
+      setAssignedSurveys(surveys);
+    });
+    const unsubResponses = subscribeForgeResponsesForStudent(userId, (responses) => {
+      setSurveyResponses(responses);
+    });
+    const unsubReports = subscribeReportsForStudent(userId, (reportsData) => {
+      setReports(reportsData.sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime()));
+    });
+    const unsubTasks = subscribeCounselorTasksForStudent(userId, (tasksData) => {
+      setCounselorTasksSync(tasksData);
+    });
+    return () => {
+      unsubThreads();
+      unsubSurveys();
+      unsubResponses();
+      unsubReports();
+      unsubTasks();
+    };
+  }, [userId, studentProgram, selectedEmailThreadId]);
+
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => scrollToBottom(), [messages]);
 
@@ -475,6 +543,58 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   const toggleTask = async (id: string) => {
     setTasks(tasks.map(t => t.id === id ? { ...t, isCompleted: !t.isCompleted } : t));
     await db.toggleTaskCompletion(userEmail, id);
+  };
+
+  const handleCounselorTaskComplete = async (taskId: string) => {
+    const completedAt = new Date().toISOString();
+    setCounselorTasksSync(prev => prev.map(task => task.id === taskId ? { ...task, completedAt } : task));
+    await updateCounselorTaskCompletion(taskId, completedAt);
+  };
+
+  const handleEmailReplySend = async () => {
+    if (!selectedEmailThread || !emailReply.trim()) return;
+    const reply = {
+      id: `email_msg_${Date.now()}`,
+      threadId: selectedEmailThread.id,
+      senderName: user.name || studentName,
+      senderEmail: user.email,
+      body: emailReply.trim(),
+      timestamp: new Date().toISOString(),
+      direction: 'sent' as const,
+    };
+    const updatedThread: CounselorEmailThread = {
+      ...selectedEmailThread,
+      messages: [...selectedEmailThread.messages, reply],
+      updatedAt: new Date().toISOString(),
+    };
+    setEmailThreads(prev => prev.map(thread => thread.id === updatedThread.id ? updatedThread : thread));
+    setEmailReply('');
+    await upsertEmailThread(updatedThread);
+  };
+
+  const handleSurveyAnswerChange = (surveyId: string, questionId: string, score: number) => {
+    setSurveyDrafts(prev => ({
+      ...prev,
+      [surveyId]: { ...prev[surveyId], [questionId]: score },
+    }));
+  };
+
+  const handleSubmitSurvey = async (survey: ForgeSurvey) => {
+    const draft = surveyDrafts[survey.id] || {};
+    const answers = survey.questions
+      .filter(q => typeof draft[q.id] === 'number')
+      .map(q => ({ questionId: q.id, score: draft[q.id] }));
+    if (answers.length === 0) return;
+
+    const response: ForgeResponse = {
+      id: `response_${survey.id}_${userId}_${Date.now()}`,
+      surveyId: survey.id,
+      studentId: userId,
+      submittedAt: new Date().toISOString(),
+      answers,
+    };
+    await saveForgeResponse(response);
+    setSurveyDrafts(prev => ({ ...prev, [survey.id]: {} }));
   };
 
   const handleBookSlot = (slot: AppointmentSlot) => {
@@ -704,6 +824,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           <div className="space-y-4">
             <button onClick={() => setActiveTab('home')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'home' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Home size={20} /> Home</button>
             <button onClick={() => setActiveTab('tasks')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'tasks' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><CheckSquare size={20} /> Tasks</button>
+            <button onClick={() => setActiveTab('inbox')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'inbox' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><MessageSquare size={20} /> Counselor Inbox</button>
+            <button onClick={() => setActiveTab('surveys')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'surveys' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Sword size={20} /> Surveys</button>
+            <button onClick={() => setActiveTab('reports')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'reports' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Download size={20} /> Reports</button>
             <button onClick={() => setActiveTab('journal')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'journal' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><PenTool size={20} /> Journal</button>
             <button onClick={() => setActiveTab('booking')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'booking' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Calendar size={20} /> Slot Booking</button>
           </div>
@@ -926,7 +1049,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   <button onClick={() => setActiveTab('tasks')} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 flex flex-col items-center justify-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left min-h-[160px]">
                     <CheckSquare size={32} className="mb-3 opacity-90" />
                     <h3 className="font-bold text-lg md:text-xl text-center mb-1">Wellness Quests</h3>
-                    <p className="text-xs md:text-sm opacity-80 text-center">{tasks.filter(t => t.assignedBy !== 'system').length} Active Tasks · Tap</p>
+                    <p className="text-xs md:text-sm opacity-80 text-center">{totalActiveTasks} Active Tasks · Tap</p>
                   </button>
 
                   {/* Workload Meter Column - Standard Gradient Tile */}
@@ -1052,6 +1175,36 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   </div>
                 )}
 
+                {/* ── Counselor Tasks (Synced) ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3 mt-6">
+                    <CheckSquare size={16} className="text-indigo-600" />
+                    <h3 className="font-bold text-slate-600 text-base">Counselor Action Items</h3>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">Synced</span>
+                  </div>
+                  {counselorTasksSync.length === 0 && (
+                    <p className="text-center text-slate-400 text-sm py-4">No counselor tasks synced yet.</p>
+                  )}
+                  <div className="space-y-4">
+                    {counselorTasksSync.map(task => (
+                      <div key={task.id} className={`p-4 rounded-2xl flex items-center gap-4 transition-all border ${task.completedAt ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.completedAt ? 'border-emerald-500 bg-emerald-500' : 'border-slate-400'}`}>
+                          {task.completedAt && <CheckSquare size={14} className="text-white" />}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className={`font-bold ${task.completedAt ? 'text-emerald-700 line-through' : 'text-[#2e2a27]'}`}>{task.title}</h4>
+                          <p className="text-xs text-slate-400">Due: {new Date(task.dueAt).toLocaleDateString()}</p>
+                        </div>
+                        {!task.completedAt && (
+                          <button onClick={() => handleCounselorTaskComplete(task.id)} className="text-xs font-bold bg-[#8a6b5c] text-white px-3 py-1.5 rounded-lg">
+                            Mark Done
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* ── Counsellor-Assigned Tasks ── */}
                 <div>
                   <h3 className="font-bold text-slate-600 text-base mb-3">Assigned by Counsellor</h3>
@@ -1071,6 +1224,158 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                       </div>
                     ))}
                   </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── COUNSELOR INBOX TAB ───────────────────────────────── */}
+            {activeTab === 'inbox' && (
+              <motion.div
+                key="inbox"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-4"
+              >
+                <h2 className="text-2xl font-bold text-[#2e2a27]">Counselor Inbox</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-3 space-y-2 max-h-[70vh] overflow-y-auto">
+                    {sortedEmailThreads.length === 0 && (
+                      <p className="text-center text-slate-400 text-sm py-6">No counselor emails yet.</p>
+                    )}
+                    {sortedEmailThreads.map(thread => (
+                      <button
+                        key={thread.id}
+                        onClick={() => setSelectedEmailThreadId(thread.id)}
+                        className={`w-full text-left p-3 rounded-xl border ${selectedEmailThreadId === thread.id ? 'border-[#8a6b5c] bg-[#f7f0eb]' : 'border-slate-200 bg-white'}`}
+                      >
+                        <p className="text-xs font-bold text-slate-700 truncate">{thread.subject}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{thread.messages[thread.messages.length - 1]?.body || 'No messages yet'}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="lg:col-span-2 bg-slate-50 rounded-2xl border border-slate-200 p-4 flex flex-col">
+                    <div className="flex-1 space-y-3 overflow-y-auto">
+                      {selectedEmailThread?.messages.map(msg => (
+                        <div key={msg.id} className={`p-3 rounded-xl text-xs ${msg.senderEmail === user.email ? 'bg-[#8a6b5c] text-white ml-auto max-w-[80%]' : 'bg-white border border-slate-200 text-slate-700 max-w-[80%]'}`}>
+                          <div className="flex justify-between mb-1">
+                            <span className="font-bold">{msg.senderName}</span>
+                            <span className="text-[10px] opacity-70">{new Date(msg.timestamp).toLocaleString()}</span>
+                          </div>
+                          <p>{msg.body}</p>
+                        </div>
+                      ))}
+                      {selectedEmailThread?.messages.length === 0 && (
+                        <p className="text-center text-xs text-slate-400">Select a thread to view messages.</p>
+                      )}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        value={emailReply}
+                        onChange={(e) => setEmailReply(e.target.value)}
+                        placeholder="Reply to counselor..."
+                        className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                      />
+                      <button onClick={handleEmailReplySend} className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg">
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── SURVEYS TAB ───────────────────────────────────────── */}
+            {activeTab === 'surveys' && (
+              <motion.div
+                key="surveys"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-4"
+              >
+                <h2 className="text-2xl font-bold text-[#2e2a27]">Counselor Surveys</h2>
+                {assignedSurveys.length === 0 && (
+                  <p className="text-slate-400 text-sm">No surveys assigned yet.</p>
+                )}
+                <div className="space-y-4">
+                  {assignedSurveys.map(survey => {
+                    const latestResponse = surveyResponses
+                      .filter(r => r.surveyId === survey.id)
+                      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
+                    return (
+                      <div key={survey.id} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-bold text-slate-700">{survey.title}</p>
+                            <p className="text-[11px] text-slate-400">Assigned {new Date(survey.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          {latestResponse && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Submitted</span>
+                          )}
+                        </div>
+                        {survey.questions.map(question => (
+                          <div key={question.id} className="flex flex-col gap-2">
+                            <p className="text-xs text-slate-600">{question.text}</p>
+                            <select
+                              value={surveyDrafts[survey.id]?.[question.id] || ''}
+                              onChange={(e) => handleSurveyAnswerChange(survey.id, question.id, Number(e.target.value))}
+                              className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                            >
+                              <option value="">Select score</option>
+                              {Array.from({ length: question.scale }, (_, i) => i + 1).map(score => (
+                                <option key={score} value={score}>{score} — {question.meanings[score - 1] || ''}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                        <button onClick={() => handleSubmitSurvey(survey)} className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg">
+                          Submit Responses
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── REPORTS TAB ───────────────────────────────────────── */}
+            {activeTab === 'reports' && (
+              <motion.div
+                key="reports"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-4"
+              >
+                <h2 className="text-2xl font-bold text-[#2e2a27]">Counselor Reports</h2>
+                {reports.length === 0 && (
+                  <p className="text-slate-400 text-sm">No reports shared yet.</p>
+                )}
+                <div className="space-y-4">
+                  {reports.map(report => (
+                    <div key={report.id} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-slate-700">Report · {new Date(report.generatedAt).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-slate-500 font-bold uppercase">Current State</p>
+                        <p className="text-sm text-slate-600">{report.currentState}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-slate-500 font-bold uppercase">Concerns</p>
+                        <p className="text-sm text-slate-600">{report.concerns}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-slate-500 font-bold uppercase">Suggested Actions</p>
+                        <p className="text-sm text-slate-600">{report.actions}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </motion.div>
             )}
@@ -1379,6 +1684,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       <div className="md:hidden fixed bottom-0 left-0 w-full bg-[var(--color-elevated)] border-t border-[var(--border-subtle)] p-2 flex justify-around items-center z-20">
         <button onClick={() => setActiveTab('home')} className={`p-2 rounded-full ${activeTab === 'home' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><Home size={24} /></button>
         <button onClick={() => setActiveTab('tasks')} className={`p-2 rounded-full ${activeTab === 'tasks' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><CheckSquare size={24} /></button>
+        <button onClick={() => setActiveTab('inbox')} className={`p-2 rounded-full ${activeTab === 'inbox' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><MessageSquare size={24} /></button>
+        <button onClick={() => setActiveTab('surveys')} className={`p-2 rounded-full ${activeTab === 'surveys' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><Sword size={24} /></button>
+        <button onClick={() => setActiveTab('reports')} className={`p-2 rounded-full ${activeTab === 'reports' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><Download size={24} /></button>
         <button onClick={() => setActiveTab('booking')} className={`p-2 rounded-full ${activeTab === 'booking' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><Calendar size={24} /></button>
       </div>
 

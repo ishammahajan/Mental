@@ -130,3 +130,76 @@ export interface WellnessPost {
   isPinned?: boolean;
 }
 
+export type EmailDirection = 'sent' | 'received';
+
+export interface CounselorEmailMessage {
+  id: string;
+  threadId: string;
+  senderName: string;
+  senderEmail: string;
+  body: string;
+  timestamp: string;
+  direction: EmailDirection;
+}
+
+export interface CounselorEmailThread {
+  id: string;
+  counselorId: string;
+  studentId: string;
+  subject: string;
+  participants: string[];
+  messages: CounselorEmailMessage[];
+  updatedAt?: string;
+}
+
+export interface CounselorReport {
+  id: string;
+  counselorId: string;
+  studentId: string;
+  generatedAt: string;
+  currentState: string;
+  concerns: string;
+  actions: string;
+  snippets: string[];
+  surveySummary?: string;
+  taskSummary?: string;
+}
+
+export interface ForgeQuestion {
+  id: string;
+  text: string;
+  scale: number;
+  meanings: string[];
+}
+
+export interface ForgeSurvey {
+  id: string;
+  counselorId: string;
+  title: string;
+  sourceFileName: string;
+  questions: ForgeQuestion[];
+  assignedTo: { type: 'student' | 'group'; id: string; name: string }[];
+  assignedStudentIds: string[];
+  assignedGroupIds: string[];
+  createdAt: string;
+}
+
+export interface ForgeResponse {
+  id: string;
+  surveyId: string;
+  studentId: string;
+  submittedAt: string;
+  answers: { questionId: string; score: number }[];
+}
+
+export interface CounselorTaskItem {
+  id: string;
+  counselorId: string;
+  studentId: string;
+  title: string;
+  description: string;
+  assignedAt: string;
+  dueAt: string;
+  completedAt?: string;
+}
+
