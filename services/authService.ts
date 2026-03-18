@@ -90,3 +90,5 @@ export const onAuthChange = (
  * Synchronous — use onAuthChange for reactive state.
  */
 export const getCurrentUser = (): FirebaseUser | null => auth.currentUser;
+
+

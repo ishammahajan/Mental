@@ -20,7 +20,7 @@ interface ReportData {
 
 interface Props { onClose: () => void; }
 
-const COLORS = ['#8A9A5B', '#90caf9', '#ffcc80', '#ef9a9a', '#b39ddb'];
+const COLORS = ['#8a6b5c', '#dccfc4', '#dccfc4', '#a66a63', '#dccfc4'];
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const CounselorReportModal: React.FC<Props> = ({ onClose }) => {
@@ -92,17 +92,17 @@ const CounselorReportModal: React.FC<Props> = ({ onClose }) => {
         const [from, to] = getDateRange();
         const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>SPeakUp Counselling Metrics Report</title>
 <style>
-  body{font-family:'Segoe UI',sans-serif;max-width:800px;margin:40px auto;color:#1e293b;font-size:14px;}
-  h1{color:#4a5568;font-size:22px;border-bottom:2px solid #8A9A5B;padding-bottom:8px;}
-  h2{color:#8A9A5B;font-size:15px;margin-top:24px;}
+    body{font-family:'Segoe UI',sans-serif;max-width:800px;margin:40px auto;color:#2e2a27;font-size:14px;}
+    h1{color:#5b5350;font-size:22px;border-bottom:2px solid #8a6b5c;padding-bottom:8px;}
+  h2{color:#8a6b5c;font-size:15px;margin-top:24px;}
   .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0;}
-  .kpi{background:#f0fdf4;border:1px solid #8A9A5B33;border-radius:12px;padding:16px;text-align:center;}
-  .kpi-num{font-size:32px;font-weight:900;color:#8A9A5B;}
-  .kpi-label{font-size:12px;color:#64748b;margin-top:4px;}
+  .kpi{background:#f1e6df;border:1px solid #8a6b5c33;border-radius:12px;padding:16px;text-align:center;}
+  .kpi-num{font-size:32px;font-weight:900;color:#8a6b5c;}
+    .kpi-label{font-size:12px;color:#7c7470;margin-top:4px;}
   table{width:100%;border-collapse:collapse;margin:12px 0;}
-  th{background:#8A9A5B;color:white;padding:8px 12px;text-align:left;font-size:12px;}
-  td{padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;}
-  .disclaimer{margin-top:32px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px;}
+  th{background:#8a6b5c;color:white;padding:8px 12px;text-align:left;font-size:12px;}
+  td{padding:8px 12px;border-bottom:1px solid #e6dad1;font-size:13px;}
+  .disclaimer{margin-top:32px;font-size:11px;color:#7c7470;border-top:1px solid #e6dad1;padding-top:12px;}
   @media print{button{display:none;}}
 </style></head><body>
 <h1>📊 SPeakUp Counselling Metrics Report</h1>
@@ -154,9 +154,9 @@ ${data.peakDays.map(d => `<tr><td>${d.day}</td><td>${d.count}</td></tr>`).join('
         <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
                 {/* Header */}
-                <div className="bg-[#8A9A5B]/10 border-b border-[#8A9A5B]/20 p-5 flex justify-between items-start">
+                <div className="bg-[#8a6b5c]/10 border-b border-[#8a6b5c]/20 p-5 flex justify-between items-start">
                     <div>
-                        <h2 className="text-xl font-black text-[#708090] flex items-center gap-2"><BarChart2 size={20} /> Interaction Metrics Report</h2>
+                        <h2 className="text-xl font-black text-[#5b5350] flex items-center gap-2"><BarChart2 size={20} /> Interaction Metrics Report</h2>
                         <p className="text-xs text-slate-400 mt-1">Anonymised, aggregate data only — no student identifiers</p>
                     </div>
                     <button onClick={onClose} className="p-2 bg-white rounded-full shadow-sm text-slate-400 hover:text-red-500 transition-all">
@@ -168,15 +168,15 @@ ${data.peakDays.map(d => `<tr><td>${d.day}</td><td>${d.count}</td></tr>`).join('
                 <div className="px-5 pt-4 flex flex-wrap gap-2">
                     {([['7d', 'Last 7 Days'], ['30d', 'Last 30 Days'], ['month', 'This Month'], ['custom', 'Custom']] as [Range, string][]).map(([v, label]) => (
                         <button key={v} onClick={() => setRange(v)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${range === v ? 'bg-[#8A9A5B] text-white border-[#8A9A5B]' : 'bg-white text-slate-500 border-slate-200 hover:border-[#8A9A5B]'}`}>
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${range === v ? 'bg-[#8a6b5c] text-white border-[#8a6b5c]' : 'bg-white text-slate-500 border-slate-200 hover:border-[#8a6b5c]'}`}>
                             {label}
                         </button>
                     ))}
                     {range === 'custom' && (
                         <div className="flex gap-2 items-center mt-2 w-full">
-                            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1 text-xs flex-1 outline-none focus:ring-2 focus:ring-[#8A9A5B]/30" />
+                            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1 text-xs flex-1 outline-none focus:ring-2 focus:ring-[#8a6b5c]/30" />
                             <span className="text-slate-400 text-xs">to</span>
-                            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1 text-xs flex-1 outline-none focus:ring-2 focus:ring-[#8A9A5B]/30" />
+                            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1 text-xs flex-1 outline-none focus:ring-2 focus:ring-[#8a6b5c]/30" />
                         </div>
                     )}
                 </div>
@@ -188,11 +188,11 @@ ${data.peakDays.map(d => `<tr><td>${d.day}</td><td>${d.count}</td></tr>`).join('
                             {/* KPI Row */}
                             <div className="grid grid-cols-3 gap-4">
                                 {[
-                                    { label: 'Total Bookings', value: data.totalBookings, color: '#8A9A5B' },
-                                    { label: 'Confirmed', value: data.confirmedBookings, color: '#22c55e' },
-                                    { label: 'Pending', value: data.pendingBookings, color: '#f59e0b' },
+                                    { label: 'Total Bookings', value: data.totalBookings, color: '#8a6b5c' },
+                                    { label: 'Confirmed', value: data.confirmedBookings, color: '#8a6b5c' },
+                                    { label: 'Pending', value: data.pendingBookings, color: '#8a7b63' },
                                 ].map(k => (
-                                    <div key={k.label} className="bg-[#f8f6f1] rounded-2xl p-4 text-center border border-slate-100">
+                                    <div key={k.label} className="bg-[#f2ede7] rounded-2xl p-4 text-center border border-slate-100">
                                         <p className="text-3xl font-black" style={{ color: k.color }}>{k.value}</p>
                                         <p className="text-xs text-slate-400 mt-1">{k.label}</p>
                                     </div>
@@ -228,11 +228,11 @@ ${data.peakDays.map(d => `<tr><td>${d.day}</td><td>${d.count}</td></tr>`).join('
                                 <h3 className="font-bold text-slate-700 text-sm mb-3">Weekly Booking Frequency</h3>
                                 <ResponsiveContainer width="100%" height={150}>
                                     <BarChart data={data.weeklyBrequency} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                        <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                                        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} />
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f2ede7" />
+                                        <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#7c7470' }} />
+                                        <YAxis tick={{ fontSize: 10, fill: '#7c7470' }} allowDecimals={false} />
                                         <Tooltip contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
-                                        <Bar dataKey="bookings" fill="#8A9A5B" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="bookings" fill="#8a6b5c" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
@@ -242,10 +242,10 @@ ${data.peakDays.map(d => `<tr><td>${d.day}</td><td>${d.count}</td></tr>`).join('
                                 <h3 className="font-bold text-slate-700 text-sm mb-3">Peak Days of the Week</h3>
                                 <ResponsiveContainer width="100%" height={130}>
                                     <BarChart data={data.peakDays} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                                        <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
+                                        <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#7c7470' }} />
+                                        <YAxis tick={{ fontSize: 11, fill: '#7c7470' }} allowDecimals={false} />
                                         <Tooltip contentStyle={{ borderRadius: 8, border: 'none' }} />
-                                        <Bar dataKey="count" fill="#7eb8f0" radius={[4, 4, 0, 0]} name="Bookings" />
+                                        <Bar dataKey="count" fill="#dccfc4" radius={[4, 4, 0, 0]} name="Bookings" />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
@@ -261,7 +261,7 @@ ${data.peakDays.map(d => `<tr><td>${d.day}</td><td>${d.count}</td></tr>`).join('
                         <button onClick={handleShare} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors">
                             <Share2 size={14} /> Share via Email
                         </button>
-                        <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-2 bg-[#8A9A5B] hover:bg-[#728248] text-white rounded-xl text-xs font-bold shadow-sm transition-colors">
+                        <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-2 bg-[#8a6b5c] hover:bg-[#785a4d] text-white rounded-xl text-xs font-bold shadow-sm transition-colors">
                             <Download size={14} /> Download PDF
                         </button>
                     </div>
@@ -272,3 +272,6 @@ ${data.peakDays.map(d => `<tr><td>${d.day}</td><td>${d.count}</td></tr>`).join('
 };
 
 export default CounselorReportModal;
+
+
+

@@ -42,11 +42,11 @@ const downloadConsentPDF = (
     body { font-family: 'Inter', sans-serif; font-size: 13px; color: #222; line-height: 1.7; }
     h1 { font-size: 18px; text-align: center; margin-bottom: 4px; }
     .subtitle { text-align: center; color: #666; font-size: 12px; margin-bottom: 20px; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #f7f7f7; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #e0e0e0; }
-    h3 { font-size: 13px; font-weight: 700; margin: 16px 0 4px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #f2ede7; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #e6dad1; }
+    h3 { font-size: 13px; font-weight: 700; margin: 16px 0 4px; border-bottom: 1px solid #e6dad1; padding-bottom: 4px; }
     ul { padding-left: 20px; margin: 4px 0; }
     li { margin-bottom: 4px; }
-    .sig-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; border-top: 2px solid #e0e0e0; padding-top: 16px; }
+    .sig-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; border-top: 2px solid #e6dad1; padding-top: 16px; }
     .sig-box { border: 1px solid #ccc; border-radius: 6px; padding: 12px; min-height: 80px; }
     .sig-label { font-size: 11px; font-weight: 700; color: #555; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
     .watermark { text-align: center; color: #ccc; font-size: 10px; margin-top: 32px; }
@@ -243,7 +243,7 @@ const ConsentForm: React.FC<ConsentFormProps> = ({ role, studentName, program, o
           </button>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-gray-200 rounded-lg">Cancel</button>
-            <button onClick={handleSubmit} className="px-6 py-2 bg-[#8A9A5B] text-white rounded-lg shadow-md hover:bg-[#76854d]">I Agree & Submit</button>
+            <button onClick={handleSubmit} className="px-6 py-2 bg-[#8a6b5c] text-white rounded-lg shadow-md hover:bg-[#785a4d]">I Agree & Submit</button>
           </div>
         </div>
       </div>
@@ -252,3 +252,6 @@ const ConsentForm: React.FC<ConsentFormProps> = ({ role, studentName, program, o
 };
 
 export default ConsentForm;
+
+
+

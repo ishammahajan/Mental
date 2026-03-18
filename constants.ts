@@ -8,12 +8,12 @@ export const COUNSELORS = [
 
 
 export const COLORS = {
-  sage: '#8A9A5B',
-  sand: '#E6DDD0',
-  slate: '#708090',
-  orange: '#CC5500',
+  sage: '#8a6b5c',
+  sand: '#f8f4ef',
+  slate: '#5b5350',
+  orange: '#8a6b5c',
   white: '#FFFFFF',
-  shadowDark: '#c4bcb1',
+  shadowDark: '#d8c9bf',
   shadowLight: '#ffffff'
 };
 
@@ -61,11 +61,11 @@ Example: \`[[MOOD: anxious]] [CRISIS_PROTOCOL_TRIGGER] I am so sorry you are in 
 `;
 
 export const VIBES: { type: VibeType; color: string; label: string }[] = [
-  { type: 'calm', color: '#8A9A5B', label: 'Calm' },
-  { type: 'anxious', color: '#CC5500', label: 'Anxious' },
-  { type: 'focus', color: '#708090', label: 'Focused' },
-  { type: 'tired', color: '#A0A0A0', label: 'Drained' },
-  { type: 'energetic', color: '#E6C685', label: 'Energetic' },
+  { type: 'calm', color: '#8a6b5c', label: 'Calm' },
+  { type: 'anxious', color: '#8a7b63', label: 'Anxious' },
+  { type: 'focus', color: '#8a6b5c', label: 'Focused' },
+  { type: 'tired', color: '#7c7470', label: 'Drained' },
+  { type: 'energetic', color: '#8a6b5c', label: 'Energetic' },
 ];
 
 export const MOCK_STUDENTS: AnonymizedStudent[] = [
@@ -82,7 +82,7 @@ export const MOCK_STUDENTS: AnonymizedStudent[] = [
 
   **PROMPT A: Interface 1 - The Student Mobile App ("The Sanctuary")**
   "High-fidelity mobile UI design, neumorphic aesthetic. 
-  Background: Warm beige/sand (#E6DDD0). 
+  Background: Warm beige/sand (#f8f4ef). 
   Central Element: A glowing, breathing abstract blob (SParsh) made of frosted glass in Sage Green. 
   Bottom Section: 'The Workload Wave' - A smooth 3D sine wave chart where peaks are soft orange (stress) and valleys are green (rest).
   Typography: Soft, rounded sans-serif (Nunito). 
@@ -97,3 +97,4 @@ export const MOCK_STUDENTS: AnonymizedStudent[] = [
   - Right Col: 'Slot Publisher' calendar grid.
   Feeling: Professional, clinical, data-dense, efficient, 'Control Tower'."
 */
+

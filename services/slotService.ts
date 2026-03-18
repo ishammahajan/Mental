@@ -197,3 +197,5 @@ export const subscribeToSlots = (callback: (slots: AppointmentSlot[]) => void): 
         callback(slots.filter(isSlotValid));
     });
 };
+
+

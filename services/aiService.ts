@@ -40,3 +40,5 @@ export const analyzeBurnoutRisk = async (metrics: any): Promise<string> => {
         return 'Analysis unavailable at this time.';
     }
 };
+
+

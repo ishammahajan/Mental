@@ -69,16 +69,16 @@ export default function App() {
   // that matches the app's sand background (no flash of wrong content)
   if (authLoading) {
     return (
-      <div className="h-screen w-full bg-[#E6DDD0] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
+      <div className="h-screen w-full app-shell flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 ui-card-soft px-8 py-10">
           <div className="relative w-16 h-16">
-            <div className="absolute inset-0 bg-[#8A9A5B] rounded-full opacity-20 animate-ping" />
-            <div className="absolute inset-2 bg-[#8A9A5B] rounded-full opacity-40 animate-pulse" />
-            <div className="absolute inset-4 bg-[#8A9A5B] rounded-full flex items-center justify-center">
+            <div className="absolute inset-0 bg-[var(--color-primary)] rounded-full opacity-15 animate-ping" />
+            <div className="absolute inset-2 bg-[var(--color-primary)] rounded-full opacity-35 animate-pulse" />
+            <div className="absolute inset-4 bg-[var(--color-primary)] rounded-full flex items-center justify-center">
               <span className="text-white text-xl font-bold">S</span>
             </div>
           </div>
-          <p className="text-[#708090]/60 text-sm">Restoring session...</p>
+          <p className="text-[var(--color-text-secondary)] text-sm">Restoring session...</p>
         </div>
       </div>
     );
@@ -91,7 +91,7 @@ export default function App() {
   return (
     <NotificationProvider>
       <SParshProvider>
-        <div className="min-h-screen bg-[#E6DDD0] relative font-sans">
+        <div className="min-h-screen app-shell relative font-sans text-[var(--color-text)]">
 
           {/* Crisis Overlay (Global) */}
           {isCrisisMode && (
@@ -123,3 +123,8 @@ export default function App() {
     </NotificationProvider>
   );
 }
+
+
+
+
+

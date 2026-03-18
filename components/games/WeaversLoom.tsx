@@ -40,7 +40,7 @@ export default function WeaversLoom({ gameId, gameTitle, onComplete, onClose }: 
     };
 
     // SVG Tapestry Colors based on active threads
-    const threadColorMap = ['#475569', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+    const threadColorMap = ['#7c7470', '#8a6b5c', '#8a7b63', '#dccfc4', '#f1e6df'];
     const getThreadColor = (index: number) => index < activeColors ? threadColorMap[(index % 4) + 1] : threadColorMap[0];
 
     return (
@@ -61,12 +61,12 @@ export default function WeaversLoom({ gameId, gameTitle, onComplete, onClose }: 
 
                     <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-widest text-center">{gameTitle || "The Weaver's Loom"}</h2>
 
-                    <div className="relative w-64 h-64 border-4 border-[#8B5C3E] rounded-md shadow-2xl p-4 bg-[#2C1A1D]">
+                    <div className="relative w-64 h-64 border-4 border-[#8a6b5c] rounded-md shadow-2xl p-4 bg-[#2e2a27]">
                         {/* Wooden frame elements */}
-                        <div className="absolute top-[-10px] left-[-10px] right-[-10px] h-4 bg-[#5B3E2B] rounded shadow-lg" />
-                        <div className="absolute bottom-[-10px] left-[-10px] right-[-10px] h-4 bg-[#5B3E2B] rounded shadow-lg" />
-                        <div className="absolute top-0 bottom-0 left-[-10px] w-4 bg-[#5B3E2B] shadow-lg" />
-                        <div className="absolute top-0 bottom-0 right-[-10px] w-4 bg-[#5B3E2B] shadow-lg" />
+                        <div className="absolute top-[-10px] left-[-10px] right-[-10px] h-4 bg-[#785a4d] rounded shadow-lg" />
+                        <div className="absolute bottom-[-10px] left-[-10px] right-[-10px] h-4 bg-[#785a4d] rounded shadow-lg" />
+                        <div className="absolute top-0 bottom-0 left-[-10px] w-4 bg-[#785a4d] shadow-lg" />
+                        <div className="absolute top-0 bottom-0 right-[-10px] w-4 bg-[#785a4d] shadow-lg" />
 
                         {/* Tapestry Threads */}
                         <div className="w-full h-full flex justify-between">
@@ -90,7 +90,11 @@ export default function WeaversLoom({ gameId, gameTitle, onComplete, onClose }: 
                                     initial={{ x: -20, opacity: 0 }}
                                     animate={{ x: 200, opacity: [0, 1, 1, 0] }}
                                     transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1 }}
-                                    className="absolute top-1/2 left-0 w-8 h-2 bg-yellow-600 rounded-full shadow-[0_0_10px_rgba(202,138,4,0.8)]"
+                                    className="absolute top-1/2 left-0 w-8 h-2 rounded-full"
+                                    style={{
+                                        backgroundColor: '#8a7b63',
+                                        boxShadow: '0 0 10px rgba(138, 123, 99, 0.7)'
+                                    }}
                                 />
                             )}
                         </AnimatePresence>
@@ -204,3 +208,6 @@ export default function WeaversLoom({ gameId, gameTitle, onComplete, onClose }: 
         </div>
     );
 }
+
+
+

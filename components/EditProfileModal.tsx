@@ -69,3 +69,6 @@ const EditProfileModal: React.FC<Props> = ({ user, onClose, onSave }) => {
 };
 
 export default EditProfileModal;
+
+
+

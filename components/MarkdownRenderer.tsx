@@ -30,7 +30,7 @@ const renderInlineMarkdown = (text: string): React.ReactNode[] => {
             // Link [text](url)
             parts.push(
                 <a key={`a-${match.index}`} href={match[7]} target="_blank" rel="noopener noreferrer"
-                    className="text-[#8A9A5B] underline hover:text-[#76854d] transition-colors">
+                    className="text-[#8a6b5c] underline hover:text-[#785a4d] transition-colors">
                     {match[6]}
                 </a>
             );
@@ -118,3 +118,6 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ text, className = '
 };
 
 export default MarkdownRenderer;
+
+
+

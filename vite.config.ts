@@ -19,8 +19,8 @@ export default defineConfig(({ mode }) => {
           name: 'SPeakUp | SPJIMR',
           short_name: 'SPeakUp',
           description: 'A privacy-first mental health ecosystem for SPJIMR, featuring SParsh AI.',
-          theme_color: '#E6DDD0',
-          background_color: '#E6DDD0',
+          theme_color: '#F8F4EF',
+          background_color: '#F8F4EF',
           display: 'standalone',
           orientation: 'portrait',
           scope: '/',
@@ -59,3 +59,5 @@ export default defineConfig(({ mode }) => {
     }
   };
 });
+
+

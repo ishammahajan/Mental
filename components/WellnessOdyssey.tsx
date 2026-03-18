@@ -111,15 +111,15 @@ Be poetic but practical. Do NOT mention clinical terms or diagnoses.`;
 const getSeverity = (score: number, max: number, type: 'GAD7' | 'BDI') => {
     const pct = score / max;
     if (type === 'GAD7') {
-        if (score <= 4) return { label: 'Minimal', color: '#22c55e', stage: 1 };
+        if (score <= 4) return { label: 'Minimal', color: '#8a6b5c', stage: 1 };
         if (score <= 9) return { label: 'Mild', color: '#84cc16', stage: 2 };
-        if (score <= 14) return { label: 'Moderate', color: '#f59e0b', stage: 3 };
-        return { label: 'Severe', color: '#ef4444', stage: 4 };
+        if (score <= 14) return { label: 'Moderate', color: '#8a7b63', stage: 3 };
+        return { label: 'Severe', color: '#a66a63', stage: 4 };
     } else {
-        if (score <= 13) return { label: 'Minimal', color: '#22c55e', stage: 1 };
+        if (score <= 13) return { label: 'Minimal', color: '#8a6b5c', stage: 1 };
         if (score <= 19) return { label: 'Mild', color: '#84cc16', stage: 2 };
-        if (score <= 28) return { label: 'Moderate', color: '#f59e0b', stage: 3 };
-        return { label: 'Severe', color: '#ef4444', stage: 4 };
+        if (score <= 28) return { label: 'Moderate', color: '#8a7b63', stage: 3 };
+        return { label: 'Severe', color: '#a66a63', stage: 4 };
     }
 };
 
@@ -253,14 +253,14 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
   body { font-family: 'Segoe UI', sans-serif; max-width: 700px; margin: 40px auto; color: #1e293b; font-size: 14px; line-height: 1.6; }
   h1 { color: #0d2d1a; font-size: 24px; } h2 { color: #065f46; font-size: 16px; margin-top: 24px; }
   .badge { display: inline-block; padding: 4px 14px; border-radius: 9999px; font-weight: 700; font-size: 13px; color: white; background: ${severity.color}; }
-  .score-row { display: flex; justify-content: space-between; background: #f0fdf4; padding: 16px; border-radius: 12px; margin: 16px 0; }
+  .score-row { display: flex; justify-content: space-between; background: #f1e6df; padding: 16px; border-radius: 12px; margin: 16px 0; }
   table { width: 100%; border-collapse: collapse; margin-top: 12px; }
   th { background: #065f46; color: white; padding: 8px 12px; text-align: left; }
-  td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e6dad1; }
   tr:nth-child(even) { background: #f8fafc; }
-  .bar-wrap { background: #e2e8f0; border-radius: 99px; height: 12px; }
+  .bar-wrap { background: #e6dad1; border-radius: 99px; height: 12px; }
   .bar-fill { height: 12px; border-radius: 99px; background: #10b981; }
-  .footer { margin-top: 32px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+  .footer { margin-top: 32px; font-size: 11px; color: #7c7470; border-top: 1px solid #e6dad1; padding-top: 12px; }
   @media print { button { display: none; } }
 </style>
 </head><body>
@@ -456,8 +456,8 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
                                         max: r.maxScore,
                                     }))} margin={{ top: 5, right: 10, bottom: 5, left: -20 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                        <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                                        <YAxis domain={[0, maxScore]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                                        <XAxis dataKey="date" tick={{ fill: '#7c7470', fontSize: 10 }} />
+                                        <YAxis domain={[0, maxScore]} tick={{ fill: '#7c7470', fontSize: 10 }} />
                                         <Tooltip
                                             contentStyle={{ background: '#1e293b', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }}
                                             formatter={(value: number) => [value, 'Score']}
@@ -673,3 +673,6 @@ const WellnessOdyssey: React.FC<Props> = ({ surveyType, userId, onClose }) => {
 };
 
 export default WellnessOdyssey;
+
+
+

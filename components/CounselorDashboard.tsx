@@ -44,8 +44,8 @@ const downloadConsentAsPDF = async (slotId: string) => {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>@page{margin:24mm 20mm;}body{font - family:'Inter',sans-serif;font-size:13px;color:#222;line-height:1.7;}
     h1{font - size:18px;text-align:center;margin-bottom:8px;}
-    .info{background:#f7f7f7;padding:12px;border-radius:6px;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid #e0e0e0;}
-    .sigs{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;border-top:2px solid #e0e0e0;padding-top:16px;}
+    .info{background:#f2ede7;padding:12px;border-radius:6px;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid #e6dad1;}
+    .sigs{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;border-top:2px solid #e6dad1;padding-top:16px;}
     .sig-box{border:1px solid #ccc;border-radius:6px;padding:12px;min-height:80px;}
     .footer{text - align:center;color:#aaa;font-size:10px;margin-top:24px;}</style></head><body>
     <h1>Informed Consent for Psychological Counseling</h1>
@@ -461,24 +461,24 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-slate-800 font-sans flex flex-col relative">
+    <div className="min-h-screen app-shell text-[var(--color-text)] font-sans flex flex-col relative">
 
       {/* Top Header */}
-      <header className="bg-white border-b border-gray-200 px-4 md:px-8 py-3 md:py-4 flex flex-col sm:flex-row justify-between items-center shadow-sm z-10 gap-3">
+      <header className="bg-[var(--color-elevated)] border-b border-[var(--border-subtle)] px-4 md:px-8 py-3 md:py-4 flex flex-col sm:flex-row justify-between items-center shadow-sm z-10 gap-3">
         <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto justify-between sm:justify-start">
           <div className="flex items-center gap-2 md:gap-4">
-            <div className="bg-[#8A9A5B] p-2 rounded-lg flex-shrink-0"><Activity className="text-white" size={20} md:size={24} /></div>
-            <div><h1 className="text-base md:text-xl font-bold text-slate-800">SPeakUp <span className="hidden xs:inline text-slate-400 font-normal">| Command Center</span></h1></div>
+            <div className="bg-[#8a6b5c] p-2 rounded-lg flex-shrink-0"><Activity className="text-white" size={20} md:size={24} /></div>
+            <div><h1 className="text-base md:text-xl font-bold text-[var(--color-text)]">SPeakUp <span className="hidden xs:inline text-[var(--color-text-secondary)] font-normal">| Command Center</span></h1></div>
           </div>
           <div className="flex items-center gap-2 md:hidden">
-            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">DW</div>
+            <div className="w-8 h-8 rounded-full bg-[#e6dad1] flex items-center justify-center text-[10px] font-bold text-[var(--color-text-secondary)]">DW</div>
           </div>
         </div>
         <div className="flex items-center gap-3 md:gap-6 w-full sm:w-auto justify-around sm:justify-end">
           {/* Inbox Alert */}
           <div className="relative">
-            <button onClick={() => setShowInboxModal(true)} title="Messages" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-              <Mail className="text-slate-500 hover:text-slate-800" size={20} />
+            <button onClick={() => setShowInboxModal(true)} title="Messages" className="p-2 hover:bg-[var(--color-elevated)] rounded-full transition-colors">
+              <Mail className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]" size={20} />
             </button>
             {totalUnread > 0 && (
               <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-pulse border-2 border-white">{totalUnread}</span>
@@ -489,7 +489,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           <button
             onClick={() => setShowReportModal(true)}
             title="Download interaction metrics report"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8A9A5B]/10 hover:bg-[#8A9A5B]/20 text-[#8A9A5B] rounded-lg text-xs font-bold border border-[#8A9A5B]/30 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f1e6df] hover:bg-[#f1e6df] text-[var(--color-text)] rounded-lg text-xs font-bold border border-[var(--border-subtle)] transition-colors"
           >
             <Download size={14} /> Report
           </button>
@@ -498,9 +498,9 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           <div className="relative" ref={bellRef}>
             <button
               onClick={() => { setShowBellDropdown(v => !v); if (!showBellDropdown) markAllRead(); }}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors relative"
+              className="p-2 hover:bg-[var(--color-elevated)] rounded-full transition-colors relative"
             >
-              <Bell className="text-slate-500 hover:text-slate-800" size={20} />
+              <Bell className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]" size={20} />
               {(contextUnreadCount('counselor', '') > 0 || pendingRequests > 0) && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full animate-bounce">
                   {contextUnreadCount('counselor', '') + pendingRequests > 9 ? '9+' : contextUnreadCount('counselor', '') + pendingRequests}
@@ -587,7 +587,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
               return (
                 <div key={student.id} onClick={() => setSelectedStudent(studentId)}
-                  className={`p-4 rounded-lg border cursor-pointer transition-colors group ${selectedStudent === studentId ? 'border-[#8A9A5B] ring-1 ring-[#8A9A5B]' : 'bg-white border-gray-100'} `}>
+                  className={`p-4 rounded-lg border cursor-pointer transition-colors group ${selectedStudent === studentId ? 'border-[#8a6b5c] ring-1 ring-[#8a6b5c]' : 'bg-white border-gray-100'} `}>
                   <div className="flex justify-between items-start mb-2">
                     <span className="font-mono text-xs text-slate-500">{student.casefileId}</span>
                     {isInactive ? (
@@ -639,7 +639,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                     await chat.markThreadAsRead(counselorId, selectedStudent);
                     setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
                   }
-                }} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-[#8A9A5B] text-white rounded-md hover:bg-[#728248] shadow-sm transition-colors disabled:opacity-50">
+                }} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-[#8a6b5c] text-white rounded-md hover:bg-[#785a4d] shadow-sm transition-colors disabled:opacity-50">
                   <MessageSquare size={14} /> <span className="hidden xs:inline">Chat</span><span className="xs:hidden">Chat</span>
                 </button>
                 <button onClick={handleSendFollowUpNudge} disabled={!selectedStudent} title="Send a gentle follow-up notification to this student" className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors">
@@ -652,13 +652,13 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
               <ResponsiveContainer width="100%" height="80%">
                 <AreaChart data={stressData}>
                   <defs>
-                    <linearGradient id="colorWorkload" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.1} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0} /></linearGradient>
+                    <linearGradient id="colorWorkload" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#a66a63" stopOpacity={0.1} /><stop offset="95%" stopColor="#a66a63" stopOpacity={0} /></linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e6dad1" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#7c7470' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: '#7c7470' }} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Area type="monotone" dataKey="workload" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorWorkload)" name="Workload" />
+                  <Area type="monotone" dataKey="workload" stroke="#a66a63" strokeWidth={2} fillOpacity={1} fill="url(#colorWorkload)" name="Workload" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -792,7 +792,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                 </div>
                 <button
                   onClick={() => setShowScheduleModal(true)}
-                  className="flex items-center gap-1.5 text-xs bg-[#8A9A5B] text-white px-4 py-2 rounded-lg shadow-sm hover:bg-[#728248] transition-all hover:scale-105 font-bold"
+                  className="flex items-center gap-1.5 text-xs bg-[#8a6b5c] text-white px-4 py-2 rounded-lg shadow-sm hover:bg-[#785a4d] transition-all hover:scale-105 font-bold"
                 >
                   <PlusCircle size={14} /> New Slot
                 </button>
@@ -871,7 +871,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                 <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditSlot(null)}>
                   <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
                     <h3 className="font-bold text-slate-700 text-lg mb-4 flex items-center gap-2">
-                      <Edit2 size={16} className="text-[#8A9A5B]" /> Edit Slot
+                      <Edit2 size={16} className="text-[#8a6b5c]" /> Edit Slot
                     </h3>
                     <div className="space-y-3">
                       <div>
@@ -910,7 +910,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                                     key={day}
                                     onClick={() => setEditDate(newDateStr)}
                                     className={`p-2 w-full text-xs rounded-lg transition-all ${isSelected
-                                      ? 'bg-[#8A9A5B] text-white font-bold shadow-sm'
+                                      ? 'bg-[#8a6b5c] text-white font-bold shadow-sm'
                                       : 'hover:bg-gray-100 text-slate-700'
                                       }`}
                                   >
@@ -928,7 +928,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                           type="text"
                           value={editTime}
                           onChange={e => setEditTime(e.target.value)}
-                          className="w-full border border-gray-200 rounded-xl p-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#8A9A5B]/40 bg-gray-50"
+                          className="w-full border border-gray-200 rounded-xl p-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#8a6b5c]/40 bg-gray-50"
                           placeholder="5:00 PM"
                         />
                       </div>
@@ -941,7 +941,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                       <button
                         onClick={handleSaveEdit}
                         disabled={isSavingEdit}
-                        className="flex-1 bg-[#8A9A5B] hover:bg-[#728248] text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-60"
+                        className="flex-1 bg-[#8a6b5c] hover:bg-[#785a4d] text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-60"
                       >
                         {isSavingEdit ? 'Saving…' : 'Save Changes'}
                       </button>
@@ -961,13 +961,13 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                 <input
                   type="text" value={postTitle} onChange={e => setPostTitle(e.target.value)}
                   placeholder="Post title (e.g. World Mental Health Day 🌟)"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#8A9A5B]/40"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#8a6b5c]/40"
                 />
                 <textarea
                   value={postBody} onChange={e => setPostBody(e.target.value)}
                   placeholder="Write your message here... Emojis, line breaks welcome! 💚"
                   rows={7}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#8A9A5B]/40 resize-none"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#8a6b5c]/40 resize-none"
                 />
                 <div className="flex items-center justify-between">
                   <label className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer select-none">
@@ -975,7 +975,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                     <Pin size={13} /> Pin to top
                   </label>
                   <button onClick={handleCreatePost} disabled={isPosting || !postTitle.trim() || !postBody.trim()}
-                    className="flex items-center gap-2 text-xs bg-[#8A9A5B] text-white px-4 py-2 rounded-lg shadow-sm hover:bg-[#728248] transition-colors disabled:opacity-50">
+                    className="flex items-center gap-2 text-xs bg-[#8a6b5c] text-white px-4 py-2 rounded-lg shadow-sm hover:bg-[#785a4d] transition-colors disabled:opacity-50">
                     {isPosting ? 'Publishing...' : '📢 Publish'}
                   </button>
                 </div>
@@ -1137,8 +1137,8 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       {showInboxModal && (
         <div className="absolute inset-0 z-50 bg-black/20 flex items-start justify-end p-4 animate-in slide-in-from-right duration-200 backdrop-blur-sm">
           <div className="w-80 bg-white rounded-xl shadow-2xl h-[calc(100vh-2rem)] flex flex-col mt-16 mr-4">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-slate-800 text-white rounded-t-xl">
-              <h3 className="font-bold">Messages</h3>
+            <div className="p-4 border-b border-[var(--border-subtle)] flex justify-between items-center bg-[var(--color-elevated)] rounded-t-xl">
+              <h3 className="font-bold text-[var(--color-text)]">Messages</h3>
               <button onClick={() => setShowInboxModal(false)}><XCircle size={18} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-2">
@@ -1166,7 +1166,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       {showScheduleModal && (
         <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
-            <div className="bg-slate-800 p-4 text-white flex justify-between items-center">
+            <div className="bg-[var(--color-elevated)] p-4 text-[var(--color-text)] flex justify-between items-center">
               <h3 className="font-bold flex items-center gap-2"><CalendarIcon size={18} /> Schedule Session</h3>
               <button onClick={() => setShowScheduleModal(false)}><XCircle size={18} /></button>
             </div>
@@ -1197,7 +1197,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                           newD.setDate(d);
                           setPickerDate(newD);
                         }}
-                        className={`h - 8 w - 8 rounded - full text - sm flex items - center justify - center transition - colors ${isSelected ? 'bg-[#8A9A5B] text-white font-bold' : 'hover:bg-slate-100 text-slate-700'} `}
+                        className={`h - 8 w - 8 rounded - full text - sm flex items - center justify - center transition - colors ${isSelected ? 'bg-[#8a6b5c] text-white font-bold' : 'hover:bg-slate-100 text-slate-700'} `}
                       >
                         {d}
                       </button>
@@ -1208,13 +1208,13 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
               {/* Time Picker (Structured Grid) */}
               <div>
-                <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Clock size={16} className="text-[#8A9A5B]" /> Select Time</h4>
+                <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Clock size={16} className="text-[#8a6b5c]" /> Select Time</h4>
                 <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1 pb-2 scrollbar-hide">
                   {timeSlots.map(t => (
                     <button
                       key={t}
                       onClick={() => setSelectedTime(t)}
-                      className={`px-2 py-2.5 rounded-xl border text-xs font-bold transition-all ${selectedTime === t ? 'bg-[#8A9A5B] text-white border-[#8A9A5B] shadow-md scale-105 ring-2 ring-[#8A9A5B]/20' : 'bg-gray-50 border-gray-200 text-slate-600 hover:border-[#8A9A5B] hover:bg-white'}`}
+                      className={`px-2 py-2.5 rounded-xl border text-xs font-bold transition-all ${selectedTime === t ? 'bg-[#8a6b5c] text-white border-[#8a6b5c] shadow-md scale-105 ring-2 ring-[#8a6b5c]/20' : 'bg-gray-50 border-gray-200 text-slate-600 hover:border-[#8a6b5c] hover:bg-white'}`}
                     >
                       {t}
                     </button>
@@ -1225,7 +1225,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
               <button
                 disabled={!selectedTime}
                 onClick={handlePublishSlot}
-                className="w-full bg-[#8A9A5B] text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#75844d] transition-colors"
+                className="w-full bg-[#8a6b5c] text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#75844d] transition-colors"
               >
                 Publish Slot
               </button>
@@ -1237,7 +1237,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       {/* Chat Modal */}
       {showChatModal && (
         <div className="absolute bottom-4 right-4 w-96 h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-50 border border-gray-200 animate-in slide-in-from-bottom duration-300">
-          <div className="p-4 bg-slate-800 text-white rounded-t-xl flex justify-between items-center">
+          <div className="p-4 bg-[var(--color-elevated)] text-[var(--color-text)] rounded-t-xl flex justify-between items-center">
             <h3 className="font-bold text-sm">Chat: {(() => {
               const s = students.find(st => (st.casefileId || st.id) === selectedStudent);
               return s ? `${s.name} (${s.casefileId || s.id})` : selectedStudent;
@@ -1247,7 +1247,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
             {chatHistory.map(m => (
               <div key={m.id} className={`flex ${m.senderId === counselorId ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.senderId === counselorId ? 'bg-[#8A9A5B] text-white shadow-sm' : 'bg-white border border-gray-200 text-slate-700 shadow-sm'}`}>
+                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.senderId === counselorId ? 'bg-[#8a6b5c] text-white shadow-sm' : 'bg-white border border-gray-200 text-slate-700 shadow-sm'}`}>
                   {m.text}
                 </div>
               </div>
@@ -1270,3 +1270,10 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
 
 export default CounselorDashboard;
+
+
+
+
+
+
+

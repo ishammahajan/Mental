@@ -428,3 +428,4 @@ export const getAdminAnalytics = async (metricKey: string, groupBy: string) => {
     value: Math.floor(Math.random() * 40) + 60
   }));
 };
+

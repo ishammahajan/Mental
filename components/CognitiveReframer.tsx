@@ -139,3 +139,6 @@ export default function CognitiveReframer({ onBack }: Props) {
         </div>
     );
 }
+
+
+

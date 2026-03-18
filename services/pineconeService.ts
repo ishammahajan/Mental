@@ -118,3 +118,5 @@ export async function queryCounselorKnowledge(queryText: string, topK: number = 
         return await searchOfflineCounselorKnowledge(queryText);
     }
 }
+
+

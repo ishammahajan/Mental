@@ -84,3 +84,5 @@ export const getWeatherData = async (lat: number, lon: number): Promise<WeatherD
         aqi: aqiLevel,
     };
 };
+
+

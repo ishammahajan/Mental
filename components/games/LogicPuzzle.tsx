@@ -179,3 +179,6 @@ export default function LogicPuzzle({ gameId, gameTitle, onComplete, onClose }: 
         </div>
     );
 }
+
+
+

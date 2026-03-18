@@ -183,3 +183,6 @@ export default function CustomExplorer({ gameId, gameTitle, onComplete, onClose 
         </div>
     );
 }
+
+
+

@@ -6,23 +6,23 @@ const SParshAvatar: React.FC = () => {
 
   // Determine mood class
   let moodClass = '';
-  let glowClass = 'bg-[#8A9A5B]'; // Default sage glow
+  let glowClass = 'bg-[#8a6b5c]'; // Default sage glow
   
   if (mood === 'anxious') {
     moodClass = 'mood-anxious';
-    glowClass = 'bg-[#CC5500]';
+    glowClass = 'bg-[#8a7b63]';
   } else if (mood === 'focus') {
     moodClass = 'mood-focus';
-    glowClass = 'bg-[#708090]';
+    glowClass = 'bg-[#5b5350]';
   } else if (mood === 'tired') {
     moodClass = 'mood-tired';
-    glowClass = 'bg-[#A0A0A0]';
+    glowClass = 'bg-[#7c7470]';
   } else if (mood === 'energetic') {
     moodClass = 'mood-energetic';
-    glowClass = 'bg-[#E6C685]';
+    glowClass = 'bg-[#dccfc4]';
   } else if (mood === 'calm') {
     moodClass = ''; // Default
-    glowClass = 'bg-[#8A9A5B]';
+    glowClass = 'bg-[#8a6b5c]';
   }
 
   // Determine Outer Glow
@@ -59,3 +59,5 @@ const SParshAvatar: React.FC = () => {
 };
 
 export default SParshAvatar;
+
+

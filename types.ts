@@ -129,3 +129,4 @@ export interface WellnessPost {
   postedAt: string;    // ISO date string
   isPinned?: boolean;
 }
+

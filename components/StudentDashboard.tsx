@@ -39,8 +39,8 @@ const downloadConsentAsPDF = async (slotId: string) => {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Consent – ${consent.studentName}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
   <style>@page{margin:24mm 20mm;}body{font-family:'Inter',sans-serif;font-size:13px;color:#222;line-height:1.7;}
-  h1{font-size:18px;text-align:center;}.info{background:#f7f7f7;padding:12px;border-radius:6px;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid #e0e0e0;}
-  .sigs{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;border-top:2px solid #e0e0e0;padding-top:16px;}
+  h1{font-size:18px;text-align:center;}.info{background:#f2ede7;padding:12px;border-radius:6px;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid #e6dad1;}
+  .sigs{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;border-top:2px solid #e6dad1;padding-top:16px;}
   .sig-box{border:1px solid #ccc;border-radius:6px;padding:12px;min-height:80px;}.footer{text-align:center;color:#aaa;font-size:10px;margin-top:24px;}
   </style></head><body>
   <h1>Informed Consent for Psychological Counseling</h1>
@@ -81,13 +81,13 @@ const WallPostCard: React.FC<{ post: WellnessPost }> = ({ post }) => {
             <Pin size={11} /> Pinned
           </div>
         )}
-        <h3 className="font-bold text-[#708090] text-base mb-1 leading-snug">{post.title}</h3>
+        <h3 className="font-bold text-[#2e2a27] text-base mb-1 leading-snug">{post.title}</h3>
         <p className="text-[11px] text-slate-400 mb-3">
           📝 {post.authorName} · {new Date(post.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
         </p>
         <div className="text-sm text-slate-600 leading-relaxed flex-1"><MarkdownRenderer text={preview} /></div>
         {isLong && (
-          <div className="mt-3 flex items-center gap-1 text-[#8A9A5B] text-xs font-bold">
+          <div className="mt-3 flex items-center gap-1 text-[#8a6b5c] text-xs font-bold">
             Read full post <ChevronRight size={13} />
           </div>
         )}
@@ -99,7 +99,7 @@ const WallPostCard: React.FC<{ post: WellnessPost }> = ({ post }) => {
             <div className={`p-6 border-b flex justify-between items-start ${post.isPinned ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
               <div>
                 {post.isPinned && <div className="flex items-center gap-1 text-amber-600 text-xs font-bold uppercase tracking-wider mb-2"><Pin size={12} /> Pinned Announcement</div>}
-                <h2 className="text-xl font-black text-[#708090] leading-snug">{post.title}</h2>
+                <h2 className="text-xl font-black text-[#2e2a27] leading-snug">{post.title}</h2>
                 <p className="text-xs text-slate-500 mt-2">Posted by <strong>{post.authorName}</strong> on {new Date(post.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
               </div>
               <button onClick={() => setExpanded(false)} className="p-2 bg-white rounded-full shadow-sm text-slate-400 hover:text-red-500 hover:scale-105 transition-all">
@@ -622,15 +622,15 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       type === 'error' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-blue-100 text-blue-700 border-blue-200';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#E6DDD0]">
+    <div className="min-h-screen flex flex-col app-shell text-[var(--color-text)]">
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="w-full bg-[#DCD4C4] p-3 md:p-4 flex justify-between items-center shadow-md z-20">
+      <div className="w-full bg-[var(--color-elevated)] p-3 md:p-4 flex justify-between items-center shadow-sm z-20 border-b border-[var(--border-subtle)]">
         <div className="flex items-center gap-2 md:gap-4">
-          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#8A9A5B] flex items-center justify-center text-white font-bold text-lg md:text-xl flex-shrink-0">SU</div>
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#8a6b5c] flex items-center justify-center text-white font-bold text-lg md:text-xl flex-shrink-0">SU</div>
           <div className="min-w-0">
-            <h1 className="font-bold text-base md:text-lg text-[#708090] truncate">SpeakUp</h1>
-            <p className="text-[10px] md:text-sm text-slate-500 truncate">Hi, {studentName}</p>
+            <h1 className="font-bold text-base md:text-lg text-[var(--color-text)] truncate">SpeakUp</h1>
+            <p className="text-[10px] md:text-sm text-[var(--color-text-secondary)] truncate">Hi, {studentName}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 md:gap-3">
@@ -641,11 +641,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 await chat.markThreadAsRead(userId, selectedCounselor.email || selectedCounselor.id);
                 setUnreadP2P(0);
               }
-            }} className="neu-icon-btn p-3 rounded-full text-[#708090]">
+            }} className="neu-icon-btn p-3 rounded-full text-[#2e2a27]">
               <MessageSquare size={20} />
             </button>
             {unreadP2P > 0 && (
-              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-pulse border-2 border-[#DCD4C4]">
+              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-pulse border-2 border-[#f2ede7]">
                 {unreadP2P > 9 ? '9+' : unreadP2P}
               </span>
             )}
@@ -654,23 +654,23 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           {/* Bell Dropdown */}
           <div className="relative" ref={bellRef}>
             <button onClick={() => { setShowBellDropdown(v => !v); if (!showBellDropdown) markAllRead(); }}
-              className="neu-icon-btn p-3 rounded-full text-[#708090] relative">
-              <Bell className="text-slate-500 hover:text-slate-800" size={20} />
+              className="neu-icon-btn p-3 rounded-full text-[#2e2a27] relative">
+              <Bell className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]" size={20} />
               {unreadCount('student', userId) > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-bounce border-2 border-[#DCD4C4]">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-bounce border-2 border-[#f2ede7]">
                   {unreadCount('student', userId) > 9 ? '9+' : unreadCount('student', userId)}
                 </span>
               )}
             </button>
             {showBellDropdown && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-gray-50">
-                  <span className="font-bold text-slate-700 text-sm">Notifications</span>
-                  <button onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"><Trash2 size={12} /> Clear all</button>
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-[var(--border-subtle)] z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex justify-between items-center bg-[var(--color-elevated)]">
+                  <span className="font-bold text-[var(--color-text)] text-sm">Notifications</span>
+                  <button onClick={clearAll} className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center gap-1"><Trash2 size={12} /> Clear all</button>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {storedNotifications.filter(n => !n.targetRole || (n.targetRole === 'student' && (!n.targetUserId || n.targetUserId === userId))).length === 0 ? (
-                    <p className="text-center text-slate-400 text-sm py-8">No notifications yet</p>
+                    <p className="text-center text-[var(--color-muted)] text-sm py-8">No notifications yet</p>
                   ) : storedNotifications.filter(n => !n.targetRole || (n.targetRole === 'student' && (!n.targetUserId || n.targetUserId === userId))).map(n => (
                     <div key={n.id} className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-0 ${notifColor(n.type)} border-l-4`}>
                       <div className="flex-1 min-w-0">
@@ -700,19 +700,19 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-[#DCD4C4] p-6 flex-col hidden md:flex">
+        <div className="w-64 bg-[var(--color-elevated)] border-r border-[var(--border-subtle)] p-6 flex-col hidden md:flex">
           <div className="space-y-4">
-            <button onClick={() => setActiveTab('home')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'home' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><Home size={20} /> Home</button>
-            <button onClick={() => setActiveTab('tasks')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'tasks' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><CheckSquare size={20} /> Tasks</button>
-            <button onClick={() => setActiveTab('journal')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'journal' ? 'neu-pressed text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-black/5'}`}><PenTool size={20} /> Journal</button>
-            <button onClick={() => setActiveTab('booking')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'booking' ? 'neu-pressed text-[#8A9A5B]' : 'text-slate-500 hover:bg-black/5'}`}><Calendar size={20} /> Slot Booking</button>
+            <button onClick={() => setActiveTab('home')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'home' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Home size={20} /> Home</button>
+            <button onClick={() => setActiveTab('tasks')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'tasks' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><CheckSquare size={20} /> Tasks</button>
+            <button onClick={() => setActiveTab('journal')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'journal' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><PenTool size={20} /> Journal</button>
+            <button onClick={() => setActiveTab('booking')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'booking' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Calendar size={20} /> Slot Booking</button>
           </div>
 
           {/* Data Privacy Note */}
           <div className="mt-auto pt-6">
-            <div className="p-3 bg-white/50 rounded-xl text-[10px] text-slate-400 leading-relaxed border border-slate-200">
-              <p className="flex items-center gap-1 font-bold text-slate-500 mb-1"><Lock size={10} /> Privacy & Safety</p>
-              <p>Data stays on this device. AI uses Google Gemini free API. Not used for ads or training. In a crisis: <strong className="text-red-500">iCall 9152987821</strong></p>
+            <div className="p-3 bg-white/70 rounded-xl text-[10px] text-[var(--color-muted)] leading-relaxed border border-[var(--border-subtle)]">
+              <p className="flex items-center gap-1 font-bold text-[var(--color-text-secondary)] mb-1"><Lock size={10} /> Privacy & Safety</p>
+              <p>Data stays on this device. AI uses Google Gemini free API. Not used for ads or training. In a crisis: <strong className="text-[var(--color-error)]">iCall 9152987821</strong></p>
             </div>
           </div>
         </div>
@@ -727,17 +727,17 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
         {/* P2P Chat */}
         {showP2P && (
-          <div className="absolute inset-0 z-40 bg-[#E6DDD0] flex flex-col animate-in slide-in-from-bottom duration-300">
-            <div className="p-4 border-b border-gray-300 flex flex-col justify-center items-center bg-white/50 relative">
-              <button onClick={() => setShowP2P(false)} className="absolute right-4 top-4 bg-white p-2 rounded-full shadow-sm hover:scale-105 transition-all"><XCircle className="text-slate-400 hover:text-red-500" size={24} /></button>
-              <h3 className="font-black text-[#708090] text-lg">Chat with {selectedCounselor?.name ?? 'Counsellor'}</h3>
-              <p className="text-xs text-slate-500 mb-3 font-medium">🛡️ End-to-End Encrypted</p>
-              <button onClick={() => { setShowP2P(false); setShowCounselorPicker(true); }} className="px-4 py-2 bg-[#8A9A5B]/10 border border-[#8A9A5B]/30 shadow-sm rounded-xl text-sm text-[#8A9A5B] hover:bg-[#8A9A5B] hover:text-white transition-colors font-bold flex items-center gap-2">🔄 Switch Counsellor</button>
+          <div className="absolute inset-0 z-40 bg-[var(--color-bg)] flex flex-col animate-in slide-in-from-bottom duration-300">
+            <div className="p-4 border-b border-[var(--border-subtle)] flex flex-col justify-center items-center bg-[var(--color-elevated)] relative">
+              <button onClick={() => setShowP2P(false)} className="absolute right-4 top-4 bg-white p-2 rounded-full shadow-sm hover:scale-105 transition-all"><XCircle className="text-[var(--color-text-secondary)] hover:text-[var(--color-error)]" size={24} /></button>
+              <h3 className="font-black text-[var(--color-text)] text-lg">Chat with {selectedCounselor?.name ?? 'Counsellor'}</h3>
+              <p className="text-xs text-[var(--color-text-secondary)] mb-3 font-medium">🛡️ End-to-End Encrypted</p>
+              <button onClick={() => { setShowP2P(false); setShowCounselorPicker(true); }} className="px-4 py-2 bg-[#f1e6df] border border-[var(--border-subtle)] shadow-sm rounded-xl text-sm text-[var(--color-text)] hover:bg-[#8a6b5c] hover:text-white transition-colors font-bold flex items-center gap-2">🔄 Switch Counsellor</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {p2pMessages.map(m => (
                 <div key={m.id} className={`flex ${m.senderId === userId ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-3 rounded-xl text-sm ${m.senderId === userId ? 'bg-[#8A9A5B] text-white' : 'bg-white text-slate-600'}`}>{m.text}</div>
+                  <div className={`max-w-[80%] p-3 rounded-xl text-sm ${m.senderId === userId ? 'bg-[#8a6b5c] text-white' : 'bg-white text-[var(--color-text-secondary)] border border-[var(--border-subtle)]'}`}>{m.text}</div>
                 </div>
               ))}
               {p2pMessages.length === 0 && <p className="text-center text-slate-400 text-xs mt-10">Start a secure conversation with your counselor.</p>}
@@ -745,7 +745,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             <div className="p-4 bg-white/50">
               <div className="flex gap-2">
                 <input type="text" value={p2pInput} onChange={e => setP2PInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleP2PSend(); } }} placeholder="Type a message..." className="flex-1 p-2 rounded-lg border border-gray-300 outline-none" />
-                <button onClick={handleP2PSend} className="bg-[#8A9A5B] text-white p-2 rounded-lg"><Send size={18} /></button>
+                <button onClick={handleP2PSend} className="bg-[#8a6b5c] text-white p-2 rounded-lg"><Send size={18} /></button>
               </div>
             </div>
           </div>
@@ -768,20 +768,20 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
                 {/* Follow-up nudge banner (only for prior bookers, 15+ days) */}
                 {showFollowUpNudge && (
-                  <div className="flex-shrink-0 bg-[#f0fdf4] border border-[#8A9A5B]/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-in slide-in-from-top duration-500">
+                  <div className="flex-shrink-0 bg-[#f1e6df] border border-[#8a6b5c]/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-in slide-in-from-top duration-500">
                     <span className="text-2xl">💚</span>
                     <div className="flex-1">
-                      <p className="font-bold text-[#4a6741] text-sm">
+                      <p className="font-bold text-[#5b5350] text-sm">
                         {followUpDays >= 30 ? 'It\'s been a while — how have you been?' : 'Checking in on you'}
                       </p>
-                      <p className="text-xs text-[#5a7a51] mt-0.5">
+                      <p className="text-xs text-[#7c7470] mt-0.5">
                         {followUpDays >= 30
                           ? 'It has been over a month since your last session. Would you like to book a follow-up? There\'s no pressure — we\'re here whenever you\'re ready.'
                           : 'It\'s been a couple of weeks. You don\'t have to wait until things feel overwhelming. Booking a check-in is always a good idea.'}
                       </p>
                       <button
                         onClick={() => setActiveTab('booking')}
-                        className="mt-2 text-[11px] font-bold bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg hover:bg-[#76854d] transition-colors"
+                        className="mt-2 text-[11px] font-bold bg-[#8a6b5c] text-white px-3 py-1.5 rounded-lg hover:bg-[#785a4d] transition-colors"
                       >
                         📅 Book a follow-up session
                       </button>
@@ -792,7 +792,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                         localStorage.setItem(`speakup_nudge_dismissed_${userId}`, dismissUntil);
                         setShowFollowUpNudge(false);
                       }}
-                      className="text-[#8A9A5B] hover:text-[#4a6741] flex-shrink-0"
+                      className="text-[#8a6b5c] hover:text-[#5b5350] flex-shrink-0"
                     >
                       <X size={16} />
                     </button>
@@ -811,9 +811,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   const activeSlot = slots.find(s => (s.status === 'requested' || s.status === 'confirmed') && s.bookedByStudentId === userId);
                   if (activeSlot) {
                     return (
-                      <div className="flex-shrink-0 bg-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm animate-in fade-in zoom-in-95">
+                      <div className="flex-shrink-0 bg-[#f8f4ef] p-4 rounded-3xl border border-[#8a6b5c]/30 shadow-sm animate-in fade-in zoom-in-95">
                         <div className="flex justify-between items-center mb-2">
-                          <h3 className="font-bold text-[#8A9A5B] flex items-center gap-2">
+                          <h3 className="font-bold text-[#8a6b5c] flex items-center gap-2">
                             <Calendar size={16} /> Upcoming Meeting with Counsellor
                           </h3>
                           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${activeSlot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
@@ -825,15 +825,15 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                             <p className="text-[10px] text-slate-400 font-bold uppercase leading-none mb-1">
                               {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { weekday: 'short' }) : activeSlot.date.split(',')[0].slice(0, 3)}
                             </p>
-                            <p className="font-black text-[#708090] text-lg leading-none">
+                            <p className="font-black text-[#2e2a27] text-lg leading-none">
                               {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).getDate() : (activeSlot.date.split(' ')[1] || activeSlot.date.split(',')[0].slice(-2).replace(/[^0-9]/g, ''))}
                             </p>
-                            <p className="text-[10px] text-[#8A9A5B] font-bold uppercase leading-none mt-1">
+                            <p className="text-[10px] text-[#8a6b5c] font-bold uppercase leading-none mt-1">
                               {!isNaN(new Date(activeSlot.date).getTime()) ? new Date(activeSlot.date).toLocaleString('en-US', { month: 'short' }) : activeSlot.date.split(' ').pop()}
                             </p>
                           </div>
                           <div>
-                            <p className="font-bold text-[#708090] text-sm">{activeSlot.time}</p>
+                            <p className="font-bold text-[#2e2a27] text-sm">{activeSlot.time}</p>
                             <p className="text-xs text-slate-500">{COUNSELORS.find(c => c.id === activeSlot.counselorId)?.name || 'Counsellor'}</p>
                           </div>
                         </div>
@@ -845,14 +845,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                     return (
                       <div className="flex-shrink-0 bg-white/40 p-4 rounded-3xl border border-white/50">
                         <div className="flex justify-between items-center mb-3">
-                          <h3 className="font-bold text-[#708090] flex items-center gap-2"><Calendar size={16} /> Available Counselling Slots</h3>
-                          <button onClick={() => setActiveTab('booking')} className="text-[#8A9A5B] text-xs font-bold hover:underline">Book Now</button>
+                          <h3 className="font-bold text-[#2e2a27] flex items-center gap-2"><Calendar size={16} /> Available Counselling Slots</h3>
+                          <button onClick={() => setActiveTab('booking')} className="text-[#8a6b5c] text-xs font-bold hover:underline">Book Now</button>
                         </div>
                         <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
                           {slots.filter(s => s.status === 'open').slice(0, 3).map(slot => (
                             <button key={slot.id} onClick={() => { handleBookSlot(slot); setActiveTab('booking'); }} className="flex-shrink-0 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 min-w-[140px] text-left hover:scale-105 active:scale-95 transition-transform">
                               <p className="text-xs text-slate-400 font-bold uppercase">{slot.date}</p>
-                              <p className="font-bold text-[#708090]">{slot.time}</p>
+                              <p className="font-bold text-[#2e2a27]">{slot.time}</p>
                               <p className="text-[10px] text-slate-500 truncate">{COUNSELORS.find(c => c.id === slot.counselorId)?.name || 'Counsellor'}</p>
                             </button>
                           ))}
@@ -876,11 +876,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
                 {/* RAG Recommended Toolkits (Phase 1) */}
                 {recommendedToolkits.length > 0 && (
-                  <div className="flex-shrink-0 bg-gradient-to-br from-[#8A9A5B]/10 to-[#E6DDD0] p-4 rounded-3xl border border-[#8A9A5B]/30 shadow-sm">
+                  <div className="flex-shrink-0 bg-gradient-to-br from-[#8a6b5c]/10 to-[#f8f4ef] p-4 rounded-3xl border border-[#8a6b5c]/30 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
-                      <Sparkles size={18} className="text-[#8A9A5B]" />
-                      <h3 className="font-bold text-[#708090] text-lg">Recommended For You</h3>
-                      <span className="text-[10px] bg-[#8A9A5B]/20 text-[#8A9A5B] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">AI Curated</span>
+                      <Sparkles size={18} className="text-[#8a6b5c]" />
+                      <h3 className="font-bold text-[#2e2a27] text-lg">Recommended For You</h3>
+                      <span className="text-[10px] bg-[#8a6b5c]/20 text-[#8a6b5c] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">AI Curated</span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       {recommendedToolkits.map((tk, idx) => (
@@ -900,9 +900,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 {/* Middle Row: Wellness Wall (Ribbon View) */}
                 <div className="flex-shrink-0">
                   <div className="flex items-center gap-2 mb-3">
-                    <Newspaper size={18} className="text-[#8A9A5B]" />
-                    <h3 className="font-bold text-[#708090] text-lg">Wellness Wall</h3>
-                    <span className="text-xs bg-[#8A9A5B]/10 text-[#8A9A5B] px-2 py-0.5 rounded-full">From the Counselling Cell</span>
+                    <Newspaper size={18} className="text-[#8a6b5c]" />
+                    <h3 className="font-bold text-[#2e2a27] text-lg">Wellness Wall</h3>
+                    <span className="text-xs bg-[#8a6b5c]/10 text-[#8a6b5c] px-2 py-0.5 rounded-full">From the Counselling Cell</span>
                   </div>
                   {posts.length === 0 ? (
                     <div className="bg-white/60 rounded-2xl p-6 text-center text-slate-400">
@@ -930,7 +930,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   </button>
 
                   {/* Workload Meter Column - Standard Gradient Tile */}
-                  <button onClick={() => { }} className="bg-gradient-to-br from-[#8A9A5B] to-[#76854d] rounded-3xl p-4 flex flex-col items-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full group relative overflow-hidden">
+                  <button onClick={() => { }} className="bg-gradient-to-br from-[#8a6b5c] to-[#785a4d] rounded-3xl p-4 flex flex-col items-center text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 text-left h-full group relative overflow-hidden">
                     <div className="flex justify-between items-center mb-2 flex-shrink-0 w-full relative z-10">
                       <h3 className="font-bold flex items-center gap-1.5 md:gap-2 text-sm md:text-base"><Activity size={16} /> Workload</h3>
                       <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">Peak Load</span>
@@ -957,7 +957,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-6"
               >
-                <h2 className="text-2xl font-bold text-[#708090]">Wellness Routines</h2>
+                <h2 className="text-2xl font-bold text-[#2e2a27]">Wellness Routines</h2>
 
                 {/* ── Standard Quests (GAD-7 + BDI) — shown to all students ── */}
                 <div>
@@ -1061,11 +1061,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   <div className="space-y-4">
                     {tasks.filter(t => t.assignedBy !== 'system').map(task => (
                       <div key={task.id} onClick={() => toggleTask(task.id)} className={`p-4 rounded-2xl flex items-center gap-4 transition-all cursor-pointer ${task.isCompleted ? 'neu-pressed opacity-60' : 'neu-flat'}`}>
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.isCompleted ? 'border-[#8A9A5B] bg-[#8A9A5B]' : 'border-slate-400'}`}>
+                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.isCompleted ? 'border-[#8a6b5c] bg-[#8a6b5c]' : 'border-slate-400'}`}>
                           {task.isCompleted && <CheckSquare size={14} className="text-white" />}
                         </div>
                         <div>
-                          <h4 className={`font-bold ${task.isCompleted ? 'text-slate-400 line-through' : 'text-[#708090]'}`}>{task.title}</h4>
+                          <h4 className={`font-bold ${task.isCompleted ? 'text-slate-400 line-through' : 'text-[#2e2a27]'}`}>{task.title}</h4>
                           <p className="text-xs text-slate-400">Assigned by {task.assignedBy}</p>
                         </div>
                       </div>
@@ -1108,7 +1108,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-4"
               >
-                <h3 className="text-xl font-bold text-[#708090] mb-2">Book a Sanctuary Slot</h3>
+                <h3 className="text-xl font-bold text-[#2e2a27] mb-2">Book a Sanctuary Slot</h3>
                 <p className="text-xs text-slate-400 mb-5">Slots are published by your counselor. Tap "Book" to request — they'll confirm shortly.</p>
 
                 {slots.length === 0 ? (
@@ -1131,7 +1131,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                       }`}>
                       <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                         <div className="flex-1">
-                          <div className="font-bold text-[#708090] text-sm md:text-base">{slot.counselorName}</div>
+                          <div className="font-bold text-[#2e2a27] text-sm md:text-base">{slot.counselorName}</div>
                           <div className="text-[11px] md:text-sm text-slate-400 mt-0.5">{slot.date} · {slot.time}</div>
                           {/* Status badge */}
                           <div className="mt-2">
@@ -1165,7 +1165,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                           {isOpen && intakeSlot?.id !== slot.id && (
                             <button
                               onClick={() => handleBookSlot(slot)}
-                              className="px-4 py-2 rounded-xl text-sm font-bold bg-[#8A9A5B] text-white hover:bg-[#76854d] transition-all active:scale-95 shadow-sm"
+                              className="px-4 py-2 rounded-xl text-sm font-bold bg-[#8a6b5c] text-white hover:bg-[#785a4d] transition-all active:scale-95 shadow-sm"
                             >
                               Book
                             </button>
@@ -1207,10 +1207,10 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                               value={intakeText}
                               onChange={(e) => setIntakeText(e.target.value)}
                               placeholder="Briefly describe what's on your mind... (e.g., Feeling overwhelmed with finals, having roommate issues)"
-                              className="w-full text-sm p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8A9A5B]/50 resize-none min-h-[80px]"
+                              className="w-full text-sm p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8a6b5c]/50 resize-none min-h-[80px]"
                             />
                             <div className="flex items-center gap-1.5 mt-2 mb-4 text-[10px] text-slate-500 bg-slate-50 p-2 rounded-lg">
-                              <ShieldAlert size={12} className="text-[#8A9A5B] flex-shrink-0" />
+                              <ShieldAlert size={12} className="text-[#8a6b5c] flex-shrink-0" />
                               <p>This text is reviewed by AI to help counselors prioritize urgent requests. It is kept private between you and your counselor.</p>
                             </div>
 
@@ -1224,7 +1224,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                               <button
                                 onClick={submitIntakeRequest}
                                 disabled={isSubmittingIntake}
-                                className="px-5 py-2 rounded-lg text-sm font-bold bg-[#8A9A5B] text-white hover:bg-[#76854d] transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                                className="px-5 py-2 rounded-lg text-sm font-bold bg-[#8a6b5c] text-white hover:bg-[#785a4d] transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
                               >
                                 {isSubmittingIntake ? 'Sending...' : 'Confirm Request'}
                               </button>
@@ -1244,14 +1244,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       </div>
 
       {/* ── Medical Disclaimer Strip ─────────────────────────────────────── */}
-      <div className="bg-amber-50 border-t border-amber-200 px-4 py-2 text-[10px] text-amber-700 text-center hidden md:block">
+      <div className="bg-[var(--color-elevated)] border-t border-[var(--border-subtle)] px-4 py-2 text-[10px] text-[var(--color-text-secondary)] text-center hidden md:block">
         <ShieldAlert size={11} className="inline mr-1" />
         <strong>Wellness Tool Only:</strong> SParsh is not a doctor or clinical tool. For urgent help: <strong>iCall 9152987821</strong> (Mon–Sat 8am–10pm) • <strong>Vandrevala Foundation: 1860-2662-345</strong> (24/7)
       </div>
 
       {/* ── Floating Chat Button ──────────────────────────────────────────── */}
       <div className="fixed bottom-8 right-8 z-30">
-        <button onClick={() => setShowCounselorPicker(true)} className="w-16 h-16 rounded-full bg-[#8A9A5B] flex items-center justify-center shadow-lg text-white animate-pulse">
+        <button onClick={() => setShowCounselorPicker(true)} className="w-16 h-16 rounded-full bg-[#8a6b5c] flex items-center justify-center shadow-lg text-white animate-pulse">
           <Heart size={32} fill="white" />
         </button>
       </div>
@@ -1259,9 +1259,9 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       {/* ── Chat Window ───────────────────────────────────────────────────── */}
       {isChatOpen && (
         <div className="fixed bottom-24 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[550px] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl flex flex-col z-50 animate-in slide-in-from-bottom-10 duration-500 border border-slate-200">
-          <div className="p-3 border-b flex justify-between items-center bg-[#8A9A5B]/10 rounded-t-2xl">
+          <div className="p-3 border-b flex justify-between items-center bg-[#8a6b5c]/10 rounded-t-2xl">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-[#708090]">SParsh AI</span>
+              <span className="font-bold text-[#2e2a27]">SParsh AI</span>
               <span className="flex items-center gap-1 text-[10px] text-slate-400 bg-white/70 px-2 py-0.5 rounded-full border border-slate-200">
                 <Lock size={9} /> Free API · Locally Encrypted
               </span>
@@ -1270,7 +1270,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           </div>
 
           {/* Privacy notice banner */}
-          <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-[10px] text-amber-700 flex items-start gap-2">
+          <div className="px-4 py-2 bg-[var(--color-primary-soft)] border-b border-[var(--border-subtle)] text-[10px] text-[var(--color-text-secondary)] flex items-start gap-2">
             <ShieldAlert size={12} className="mt-0.5 flex-shrink-0" />
             <span>SParsh is a <strong>wellness companion</strong>, not a medical professional. For clinical support, please see a doctor.</span>
           </div>
@@ -1278,20 +1278,20 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
             {messages.map(msg => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] p-3 rounded-xl text-sm ${msg.role === 'user' ? 'bg-[#8A9A5B] text-white' : 'bg-gray-100 text-slate-700'}`}>
+                <div className={`max-w-[85%] p-3 rounded-xl text-sm ${msg.role === 'user' ? 'bg-[#8a6b5c] text-white' : 'bg-gray-100 text-slate-700'}`}>
                   {msg.text}
                   {/* Inline slot booking cards */}
                   {msg.role !== 'user' && msg.metadata?.type === 'booking_suggestion' && openSlots.length > 0 && (
                     <div className="mt-3 space-y-2">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Available Slots</p>
                       {openSlots.slice(0, 3).map(slot => (
-                        <div key={slot.id} className="bg-white rounded-lg p-2.5 border border-[#8A9A5B]/30 flex justify-between items-center gap-2 shadow-sm">
+                        <div key={slot.id} className="bg-white rounded-lg p-2.5 border border-[#8a6b5c]/30 flex justify-between items-center gap-2 shadow-sm">
                           <div>
-                            <p className="text-xs font-bold text-[#708090]">{slot.counselorName}</p>
+                            <p className="text-xs font-bold text-[#2e2a27]">{slot.counselorName}</p>
                             <p className="text-[11px] text-slate-400">{slot.date} · {slot.time}</p>
                           </div>
                           <button onClick={() => { handleBookSlot(slot); setIsChatOpen(false); }}
-                            className="text-xs bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg font-bold hover:bg-[#76854d] transition-colors flex-shrink-0">
+                            className="text-xs bg-[#8a6b5c] text-white px-3 py-1.5 rounded-lg font-bold hover:bg-[#785a4d] transition-colors flex-shrink-0">
                             Book Now
                           </button>
                         </div>
@@ -1310,7 +1310,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
               <button
                 onClick={() => setShowChatSlotPicker(v => !v)}
-                className="whitespace-nowrap bg-[#8A9A5B]/10 hover:bg-[#8A9A5B]/20 text-[#8A9A5B] text-[11px] px-3 py-1.5 rounded-full border border-[#8A9A5B]/30 transition-colors font-bold flex items-center gap-1.5 flex-shrink-0"
+                className="whitespace-nowrap bg-[#8a6b5c]/10 hover:bg-[#8a6b5c]/20 text-[#8a6b5c] text-[11px] px-3 py-1.5 rounded-full border border-[#8a6b5c]/30 transition-colors font-bold flex items-center gap-1.5 flex-shrink-0"
               >
                 📅 Book a Session
               </button>
@@ -1324,15 +1324,15 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
             {/* In-chat slot picker */}
             {showChatSlotPicker && (
-              <div className="bg-[#f8f6f1] rounded-xl border border-[#8A9A5B]/20 p-3 space-y-2 max-h-44 overflow-y-auto">
-                <p className="text-[11px] font-bold text-[#708090] uppercase tracking-wide">Available Slots — tap to book</p>
+              <div className="bg-[#f2ede7] rounded-xl border border-[#8a6b5c]/20 p-3 space-y-2 max-h-44 overflow-y-auto">
+                <p className="text-[11px] font-bold text-[#2e2a27] uppercase tracking-wide">Available Slots — tap to book</p>
                 {slots.filter(s => s.status === 'open').length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-2">No open slots right now. Check back soon.</p>
                 ) : (
                   slots.filter(s => s.status === 'open').map(slot => (
                     <div key={slot.id} className="flex items-center justify-between bg-white rounded-lg p-2.5 border border-slate-100 shadow-sm">
                       <div>
-                        <p className="text-xs font-bold text-[#708090]">{slot.counselorName}</p>
+                        <p className="text-xs font-bold text-[#2e2a27]">{slot.counselorName}</p>
                         <p className="text-[11px] text-slate-400">{slot.date} · {slot.time}</p>
                       </div>
                       <button
@@ -1340,7 +1340,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                           setShowChatSlotPicker(false);
                           handleBookSlot(slot);
                         }}
-                        className="text-xs bg-[#8A9A5B] text-white px-3 py-1.5 rounded-lg font-bold hover:bg-[#76854d] transition-colors"
+                        className="text-xs bg-[#8a6b5c] text-white px-3 py-1.5 rounded-lg font-bold hover:bg-[#785a4d] transition-colors"
                       >
                         Select
                       </button>
@@ -1350,7 +1350,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
               </div>
             )}
 
-            <div className="flex gap-2 items-center bg-white rounded-xl border border-gray-200 p-1.5 focus-within:ring-2 focus-within:ring-[#8A9A5B]/50 transition-shadow shadow-sm">
+            <div className="flex gap-2 items-center bg-white rounded-xl border border-gray-200 p-1.5 focus-within:ring-2 focus-within:ring-[#8a6b5c]/50 transition-shadow shadow-sm">
               <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && inputText.trim()) { handleSend(); } }} placeholder={isRecording ? "Listening..." : "Speak to SParsh..."}
                 className="flex-1 p-2 outline-none text-sm bg-transparent" />
@@ -1366,7 +1366,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
               <button
                 disabled={!inputText.trim()}
                 onClick={handleSend}
-                className="bg-[#8A9A5B] disabled:bg-[#8A9A5B]/50 text-white p-2 rounded-lg transition-colors flex-shrink-0"
+                className="bg-[#8a6b5c] disabled:bg-[#8a6b5c]/50 text-white p-2 rounded-lg transition-colors flex-shrink-0"
               >
                 <Send size={18} />
               </button>
@@ -1376,17 +1376,17 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       )}
 
       {/* Mobile Bottom Nav */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-[#DCD4C4] border-t border-gray-300 p-2 flex justify-around items-center z-20">
-        <button onClick={() => setActiveTab('home')} className={`p-2 rounded-full ${activeTab === 'home' ? 'text-[#8A9A5B]' : 'text-slate-500'}`}><Home size={24} /></button>
-        <button onClick={() => setActiveTab('tasks')} className={`p-2 rounded-full ${activeTab === 'tasks' ? 'text-[#8A9A5B]' : 'text-slate-500'}`}><CheckSquare size={24} /></button>
-        <button onClick={() => setActiveTab('booking')} className={`p-2 rounded-full ${activeTab === 'booking' ? 'text-[#8A9A5B]' : 'text-slate-500'}`}><Calendar size={24} /></button>
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-[var(--color-elevated)] border-t border-[var(--border-subtle)] p-2 flex justify-around items-center z-20">
+        <button onClick={() => setActiveTab('home')} className={`p-2 rounded-full ${activeTab === 'home' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><Home size={24} /></button>
+        <button onClick={() => setActiveTab('tasks')} className={`p-2 rounded-full ${activeTab === 'tasks' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><CheckSquare size={24} /></button>
+        <button onClick={() => setActiveTab('booking')} className={`p-2 rounded-full ${activeTab === 'booking' ? 'text-[#8a6b5c]' : 'text-[var(--color-text-secondary)]'}`}><Calendar size={24} /></button>
       </div>
 
       {/* ── Counselor Picker Modal ──────────────────────────────────────── */}
       {showCounselorPicker && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95 duration-300">
-            <h3 className="text-lg font-bold text-[#708090] mb-1">Who would you like to talk to?</h3>
+            <h3 className="text-lg font-bold text-[#2e2a27] mb-1">Who would you like to talk to?</h3>
             <p className="text-xs text-slate-400 mb-5">Your conversations are secure and private 🔒</p>
             <div className="space-y-3">
               <button onClick={() => { setShowCounselorPicker(false); setIsChatOpen(true); }}
@@ -1404,8 +1404,8 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   setShowP2P(true);
                   setP2PMessages(await chat.getP2PThread(userId, c.id));
                 }}
-                  className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-[#8A9A5B] hover:bg-[#8A9A5B]/5 transition-all text-left">
-                  <div className="w-12 h-12 rounded-full bg-[#8A9A5B] flex items-center justify-center text-white font-bold flex-shrink-0">{c.avatar}</div>
+                  className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-[#8a6b5c] hover:bg-[#8a6b5c]/5 transition-all text-left">
+                  <div className="w-12 h-12 rounded-full bg-[#8a6b5c] flex items-center justify-center text-white font-bold flex-shrink-0">{c.avatar}</div>
                   <div>
                     <p className="font-bold text-slate-700">{c.name}</p>
                     <p className="text-xs text-slate-400">{c.specialization}</p>
@@ -1447,11 +1447,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       {/* ── How It Works Overlay (Feature 6) ─────────────────────────────────── */}
       {showHowItWorks && (
         <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-[#f8f6f1] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
+          <div className="w-full max-w-lg bg-[#f2ede7] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
             {/* Header */}
-            <div className="bg-[#8A9A5B]/10 border-b border-[#8A9A5B]/20 p-5 flex justify-between items-start">
+            <div className="bg-[#8a6b5c]/10 border-b border-[#8a6b5c]/20 p-5 flex justify-between items-start">
               <div>
-                <h2 className="text-xl font-black text-[#708090]">How It Works</h2>
+                <h2 className="text-xl font-black text-[#2e2a27]">How It Works</h2>
                 <p className="text-xs text-slate-500 mt-1">Everything you need to know before your first session</p>
               </div>
               <button onClick={() => { setShowHowItWorks(false); setHowItWorksSection(null); }} className="p-2 bg-white rounded-full shadow-sm text-slate-400 hover:text-red-500 transition-all">
@@ -1493,11 +1493,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                     onClick={() => setHowItWorksSection(howItWorksSection === i ? null : i)}
                     className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 transition-colors"
                   >
-                    <span className="flex items-center gap-3 font-bold text-[#708090]">
+                    <span className="flex items-center gap-3 font-bold text-[#2e2a27]">
                       <span className="text-xl">{section.icon}</span>
                       <span className="text-sm">{section.title}</span>
                     </span>
-                    <span className="text-[#8A9A5B] flex-shrink-0">
+                    <span className="text-[#8a6b5c] flex-shrink-0">
                       {howItWorksSection === i ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </span>
                   </button>
@@ -1521,3 +1521,10 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 };
 
 export default StudentDashboard;
+
+
+
+
+
+
+

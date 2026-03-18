@@ -66,3 +66,5 @@ export async function searchOfflineCounselorKnowledge(query: string): Promise<Co
         .slice(0, 3)
         .map(si => si.item);
 }
+
+

@@ -24,3 +24,4 @@ export const decryptData = (cipherText: string): string => {
     return "Error: Could not decrypt message.";
   }
 };
+

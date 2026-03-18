@@ -10,11 +10,11 @@ interface Props {
 
 const WeatherIcon = ({ condition, size = 24 }: { condition: string; size?: number }) => {
   const c = condition.toLowerCase();
-  if (c.includes('rain')) return <CloudRain className="text-[#8A9A5B]" size={size} />;
-  if (c.includes('clouds')) return <Cloud className="text-[#8A9A5B]" size={size} />;
-  if (c.includes('snow')) return <Snowflake className="text-[#8A9A5B]" size={size} />;
-  if (c.includes('haze') || c.includes('mist') || c.includes('fog')) return <CloudFog className="text-[#8A9A5B]" size={size} />;
-  return <Sun className="text-[#8A9A5B]" size={size} />;
+  if (c.includes('rain')) return <CloudRain className="text-[#8a6b5c]" size={size} />;
+  if (c.includes('clouds')) return <Cloud className="text-[#8a6b5c]" size={size} />;
+  if (c.includes('snow')) return <Snowflake className="text-[#8a6b5c]" size={size} />;
+  if (c.includes('haze') || c.includes('mist') || c.includes('fog')) return <CloudFog className="text-[#8a6b5c]" size={size} />;
+  return <Sun className="text-[#8a6b5c]" size={size} />;
 };
 
 const AQI_LEVELS = {
@@ -116,7 +116,7 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
       {error && !loading && (
         <div className="flex flex-col items-center w-full gap-2 text-center text-sm text-orange-600">
           <span>{error}</span>
-          <button onClick={fetchEnvData} className="flex items-center gap-1 text-xs text-[#8A9A5B] hover:underline">
+          <button onClick={fetchEnvData} className="flex items-center gap-1 text-xs text-[#8a6b5c] hover:underline">
             <RefreshCw size={12} /> Try again
           </button>
         </div>
@@ -124,17 +124,17 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
       {data && !loading && !error && (
         <>
           <div className="flex-shrink-0">
-            <div className="text-[10px] text-[#708090]/60 uppercase tracking-wider mb-1 truncate max-w-[100px]">{data.location}</div>
+            <div className="text-[10px] text-[#5b5350]/60 uppercase tracking-wider mb-1 truncate max-w-[100px]">{data.location}</div>
             <div className="flex items-center gap-2">
               <WeatherIcon condition={data.condition} />
-              <span className="text-xl md:text-2xl font-bold text-[#708090]">{data.temp}°C</span>
+              <span className="text-xl md:text-2xl font-bold text-[#5b5350]">{data.temp}°C</span>
             </div>
-            <div className={`text-[10px] md:text-xs mt-1 ${AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.color || 'text-[#CC5500]'}`}>
+            <div className={`text-[10px] md:text-xs mt-1 ${AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.color || 'text-[#8a7b63]'}`}>
               AQI • {AQI_LEVELS[data.aqi as keyof typeof AQI_LEVELS]?.label || 'Unknown'}
             </div>
           </div>
           <div className="text-right flex-1 flex items-center justify-end">
-            <p className="text-xs md:text-sm font-bold text-[#8A9A5B] leading-tight md:leading-snug">{suggestion}</p>
+            <p className="text-xs md:text-sm font-bold text-[#8a6b5c] leading-tight md:leading-snug">{suggestion}</p>
           </div>
         </>
       )}
@@ -143,3 +143,5 @@ const EnvironmentWidget: React.FC<Props> = ({ variant }) => {
 };
 
 export default EnvironmentWidget;
+
+

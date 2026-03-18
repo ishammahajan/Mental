@@ -3,9 +3,9 @@ import { Key } from 'lucide-react';
 
 const NoApiKeyFallback: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#E6DDD0] p-6 text-center">
-      <Key size={48} className="text-[#CC5500] mb-4" />
-      <h1 className="text-3xl font-bold text-[#708090] mb-3">API Key Missing or Invalid</h1>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f4ef] p-6 text-center">
+      <Key size={48} className="text-[#8a7b63] mb-4" />
+      <h1 className="text-3xl font-bold text-[#5b5350] mb-3">API Key Missing or Invalid</h1>
       <p className="text-lg text-slate-600 mb-6">
         It looks like the Gemini API key is not configured correctly.
       </p>
@@ -21,3 +21,5 @@ const NoApiKeyFallback: React.FC = () => {
 };
 
 export default NoApiKeyFallback;
+
+
