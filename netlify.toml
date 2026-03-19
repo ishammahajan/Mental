@@ -1,0 +1,8 @@
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/email/send"
+  to = "/.netlify/functions/email-send"
+  status = 200

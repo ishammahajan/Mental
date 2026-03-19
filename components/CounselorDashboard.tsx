@@ -51,6 +51,7 @@ import {
   updateCounselorTaskCompletion,
   upsertEmailThread,
 } from '../services/counselorStudioService';
+import { sendCounselorEmail } from '../services/emailService';
 
 // Mock Graph Data
 const stressData = [
@@ -113,165 +114,196 @@ type ReminderItem = {
 
 const demoStudents: User[] = [
   {
-    id: 'stu_demo_aarohi',
-    casefileId: 'CF-1024',
-    name: 'Aarohi Mehta',
-    email: 'aarohi.mehta@spjimr.edu',
-    program: 'MBA Year 1',
+    id: 'stu_govardhan',
+    casefileId: 'CF-2501',
+    name: 'Govardhan Nair',
+    email: 'pgp25.govardhan@spjimr.org',
+    program: 'PGP 2025',
     role: 'student',
   } as User,
   {
-    id: 'stu_demo_kunal',
-    casefileId: 'CF-1081',
-    name: 'Kunal Iyer',
-    email: 'kunal.iyer@spjimr.edu',
-    program: 'MBA Year 2',
+    id: 'stu_harsh',
+    casefileId: 'CF-2502',
+    name: 'Harsh Sheth',
+    email: 'pgp25.harshkumar@spjimr.org',
+    program: 'PGP 2025',
     role: 'student',
   } as User,
   {
-    id: 'stu_demo_sana',
-    casefileId: 'CF-1103',
-    name: 'Sana Qureshi',
-    email: 'sana.qureshi@spjimr.edu',
-    program: 'MBA Year 1',
+    id: 'stu_isshita',
+    casefileId: 'CF-2503',
+    name: 'Isshita Kalia',
+    email: 'pgp25.isshita@spjimr.org',
+    program: 'PGP 2025',
     role: 'student',
   } as User,
   {
-    id: 'stu_demo_rhea',
-    casefileId: 'CF-1139',
-    name: 'Rhea Banerjee',
-    email: 'rhea.banerjee@spjimr.edu',
-    program: 'MBA Year 2',
+    id: 'stu_isham',
+    casefileId: 'CF-2504',
+    name: 'Isham Mahajan',
+    email: 'pgp25.isham@spjimr.org',
+    program: 'PGP 2025',
+    role: 'student',
+  } as User,
+  {
+    id: 'stu_anjit',
+    casefileId: 'CF-2505',
+    name: 'Anjit Jain',
+    email: 'pgp25.anjit@spjimr.org',
+    program: 'PGP 2025',
     role: 'student',
   } as User,
 ];
 
 const demoCaseData: Record<string, DemoCaseData> = {
-  stu_demo_aarohi: {
-    summary: 'High workload and sleep debt ahead of midterms; anxiety spikes in evening hours.',
-    lastCheckIn: 'Mar 12, 2026',
-    riskLevel: 'Moderate',
-    focusArea: 'Sleep hygiene and workload pacing',
-    indicators: [
-      { label: 'Stress', value: 'High', trend: 'up', note: 'Three deadlines in 5 days' },
-      { label: 'Sleep', value: '4-5 hrs', trend: 'down', note: 'Late-night submissions' },
-      { label: 'Mood', value: 'Anxious', trend: 'steady', note: 'Worries about performance' },
-    ],
-    interactions: [
-      { date: 'Mar 12', channel: 'Chat', summary: 'Discussed overwhelm; practiced 2-min grounding', followUp: '10-min walk after dinner' },
-      { date: 'Mar 08', channel: 'In-person', summary: 'Reviewed workload map; set 2-day buffer', followUp: 'Send updated task list' },
-      { date: 'Mar 01', channel: 'Email', summary: 'Shared breathing audio and sleep tips', followUp: 'Track sleep for 5 nights' },
-    ],
-    alerts: [
-      { level: 'High', title: 'Missed follow-up task', detail: 'No sleep log submitted for 10 days', date: 'Mar 15' },
-      { level: 'Medium', title: 'Late-night activity spike', detail: 'Active after 2:30 AM three nights', date: 'Mar 13' },
-    ],
-    lastActive: 'Mar 12, 2026',
-  },
-  stu_demo_kunal: {
-    summary: 'Low mood after internship feedback; reports social withdrawal and low energy.',
-    lastCheckIn: 'Mar 10, 2026',
-    riskLevel: 'High',
-    focusArea: 'Re-engagement and confidence rebuild',
-    indicators: [
-      { label: 'Mood', value: 'Low', trend: 'down', note: 'Negative self-talk reported' },
-      { label: 'Motivation', value: 'Low', trend: 'down', note: 'Skipped two classes' },
-      { label: 'Support', value: 'Limited', trend: 'steady', note: 'Avoiding peers this week' },
-    ],
-    interactions: [
-      { date: 'Mar 10', channel: 'Call', summary: 'Processed feedback; set small wins plan', followUp: '1:1 faculty check-in' },
-      { date: 'Mar 05', channel: 'Chat', summary: 'Reported low energy; encouraged peer buddy', followUp: 'Lunch with cohort mate' },
-      { date: 'Feb 26', channel: 'In-person', summary: 'Introduced cognitive reframing steps', followUp: 'Daily 3-line reflection' },
-    ],
-    alerts: [
-      { level: 'High', title: 'Class absence pattern', detail: 'Missed 2 consecutive lectures', date: 'Mar 11' },
-      { level: 'Medium', title: 'Withdrawal signal', detail: 'Muted chat for 7 days', date: 'Mar 09' },
-    ],
-    lastActive: 'Mar 10, 2026',
-  },
-  stu_demo_sana: {
-    summary: 'Steady progress; managing anxiety with journaling and peer support.',
+  'CF-2501': {
+    summary: 'Balancing academics and placement prep; mild sleep disruption on weekdays.',
     lastCheckIn: 'Mar 14, 2026',
-    riskLevel: 'Low',
-    focusArea: 'Maintain routines and boundary setting',
+    riskLevel: 'Moderate',
+    focusArea: 'Workload pacing and sleep consistency',
     indicators: [
-      { label: 'Stress', value: 'Moderate', trend: 'steady', note: 'Project workload stable' },
-      { label: 'Sleep', value: '6-7 hrs', trend: 'up', note: 'Consistent bedtime' },
-      { label: 'Engagement', value: 'High', trend: 'up', note: 'Active in peer group' },
+      { label: 'Stress', value: 'Moderate', trend: 'steady', note: 'Two assignment deadlines this week' },
+      { label: 'Sleep', value: '5-6 hrs', trend: 'down', note: 'Late-night prep sessions' },
+      { label: 'Mood', value: 'Stable', trend: 'steady', note: 'Responsive to weekly check-ins' },
     ],
     interactions: [
-      { date: 'Mar 14', channel: 'Chat', summary: 'Shared progress; reviewed boundary script', followUp: 'Practice assertive response' },
-      { date: 'Mar 07', channel: 'Email', summary: 'Sent coping plan template', followUp: 'Fill weekly plan' },
-      { date: 'Feb 28', channel: 'In-person', summary: 'Discussed social anxiety triggers', followUp: 'Attend 1 club meet' },
+      { date: 'Mar 14', channel: 'Chat', summary: 'Reviewed study blocks and break schedule', followUp: 'Use 45-10 focus cycles' },
+      { date: 'Mar 10', channel: 'In-person', summary: 'Mapped weekly stress triggers', followUp: 'Share revised timetable' },
+      { date: 'Mar 06', channel: 'Email', summary: 'Sent sleep routine guide', followUp: 'Log bedtime for 5 days' },
     ],
     alerts: [
-      { level: 'Low', title: 'Routine check-in', detail: 'Weekly check-in due tomorrow', date: 'Mar 17' },
+      { level: 'Medium', title: 'Sleep consistency risk', detail: 'Bedtime shifted by 2+ hrs on 3 nights', date: 'Mar 16' },
+      { level: 'Low', title: 'Follow-up due', detail: 'Routine check-in pending for tomorrow', date: 'Mar 18' },
     ],
     lastActive: 'Mar 14, 2026',
   },
-  stu_demo_rhea: {
-    summary: 'Burnout risk from leadership role; reports tension headaches.',
-    lastCheckIn: 'Mar 09, 2026',
+  'CF-2502': {
+    summary: 'Moderate anxiety spikes before evaluations; generally engaged with support plans.',
+    lastCheckIn: 'Mar 15, 2026',
     riskLevel: 'Moderate',
-    focusArea: 'Delegation and recovery breaks',
+    focusArea: 'Anxiety management and peer support consistency',
     indicators: [
-      { label: 'Stress', value: 'High', trend: 'up', note: 'Event week overload' },
-      { label: 'Somatic', value: 'Headaches', trend: 'steady', note: 'Evening tension' },
-      { label: 'Sleep', value: '5-6 hrs', trend: 'down', note: 'Late meetings' },
+      { label: 'Stress', value: 'Moderate', trend: 'up', note: 'Assessment week pressure' },
+      { label: 'Sleep', value: '6 hrs', trend: 'steady', note: 'Improved weekday consistency' },
+      { label: 'Mood', value: 'Anxious', trend: 'steady', note: 'Performance-related worry noted' },
     ],
     interactions: [
-      { date: 'Mar 09', channel: 'In-person', summary: 'Mapped delegation plan', followUp: 'Assign two co-leads' },
-      { date: 'Mar 03', channel: 'Call', summary: 'Discussed burnout signs', followUp: 'Schedule recovery block' },
-      { date: 'Feb 25', channel: 'Email', summary: 'Shared headache relief routine', followUp: 'Hydration check' },
+      { date: 'Mar 15', channel: 'Chat', summary: 'Practiced grounding sequence', followUp: 'Repeat before mock interview' },
+      { date: 'Mar 11', channel: 'Call', summary: 'Discussed anxiety triggers', followUp: 'Track trigger pattern daily' },
+      { date: 'Mar 04', channel: 'Email', summary: 'Shared coping checklist', followUp: 'Send weekly reflection' },
     ],
     alerts: [
-      { level: 'Medium', title: 'Overtime hours logged', detail: 'Workday exceeded 12 hrs twice', date: 'Mar 12' },
-      { level: 'Low', title: 'Hydration reminder', detail: 'Below 1.5L intake this week', date: 'Mar 08' },
+      { level: 'Medium', title: 'Anxiety escalation window', detail: 'Evening spike before deadlines', date: 'Mar 17' },
+      { level: 'Low', title: 'Pending reflection', detail: 'Weekly reflection not submitted', date: 'Mar 18' },
     ],
-    lastActive: 'Mar 09, 2026',
+    lastActive: 'Mar 15, 2026',
+  },
+  'CF-2503': {
+    summary: 'Maintains healthy routine and consistent engagement; low current risk.',
+    lastCheckIn: 'Mar 16, 2026',
+    riskLevel: 'Low',
+    focusArea: 'Routine maintenance and proactive check-ins',
+    indicators: [
+      { label: 'Stress', value: 'Low', trend: 'steady', note: 'No major acute stressors reported' },
+      { label: 'Sleep', value: '7 hrs', trend: 'up', note: 'Stable bedtime for 2 weeks' },
+      { label: 'Mood', value: 'Positive', trend: 'up', note: 'Good participation in activities' },
+    ],
+    interactions: [
+      { date: 'Mar 16', channel: 'Chat', summary: 'Reviewed strengths and routine', followUp: 'Continue current plan' },
+      { date: 'Mar 09', channel: 'Email', summary: 'Sent monthly wellness checklist', followUp: 'Submit checklist summary' },
+      { date: 'Mar 02', channel: 'In-person', summary: 'Validated progress metrics', followUp: 'Peer mentoring participation' },
+    ],
+    alerts: [
+      { level: 'Low', title: 'Routine wellness ping', detail: 'Monthly follow-up due in 3 days', date: 'Mar 19' },
+    ],
+    lastActive: 'Mar 16, 2026',
+  },
+  'CF-2504': {
+    summary: 'High distress profile with sleep collapse and withdrawal; priority monitoring required.',
+    lastCheckIn: 'Mar 13, 2026',
+    riskLevel: 'High',
+    focusArea: 'Acute stabilization and rapid follow-up',
+    indicators: [
+      { label: 'Stress', value: 'Very High', trend: 'up', note: 'Multiple unresolved stressors this week' },
+      { label: 'Sleep', value: '3-4 hrs', trend: 'down', note: 'Severe late-night wakefulness pattern' },
+      { label: 'Mood', value: 'Low', trend: 'down', note: 'Hopelessness language in recent check-ins' },
+    ],
+    interactions: [
+      { date: 'Mar 13', channel: 'Call', summary: 'Escalation call completed with safety planning', followUp: '24-hour follow-up check' },
+      { date: 'Mar 08', channel: 'Chat', summary: 'Reported severe overwhelm and disengagement', followUp: 'Immediate counselor outreach' },
+      { date: 'Mar 03', channel: 'In-person', summary: 'Crisis coping plan initiated', followUp: 'Daily check-in for 1 week' },
+    ],
+    alerts: [
+      { level: 'High', title: 'High-risk distress pattern', detail: 'Sleep below 4 hrs for 5 consecutive days', date: 'Mar 18' },
+      { level: 'High', title: 'Withdrawal signal', detail: 'No peer engagement activity in 6 days', date: 'Mar 17' },
+    ],
+    lastActive: 'Mar 13, 2026',
+  },
+  'CF-2505': {
+    summary: 'Moderate burnout signs linked to project overload; functioning but fatigued.',
+    lastCheckIn: 'Mar 12, 2026',
+    riskLevel: 'Moderate',
+    focusArea: 'Burnout prevention and workload redistribution',
+    indicators: [
+      { label: 'Stress', value: 'High', trend: 'up', note: 'Stacked deliverables and team dependencies' },
+      { label: 'Sleep', value: '5-6 hrs', trend: 'down', note: 'Late-night project syncs' },
+      { label: 'Mood', value: 'Tired', trend: 'steady', note: 'Reports cognitive fatigue by evening' },
+    ],
+    interactions: [
+      { date: 'Mar 12', channel: 'In-person', summary: 'Discussed delegation and task slicing', followUp: 'Assign co-owner on one stream' },
+      { date: 'Mar 07', channel: 'Email', summary: 'Shared recovery micro-break template', followUp: 'Log two breaks daily' },
+      { date: 'Mar 01', channel: 'Call', summary: 'Reviewed burnout warning signs', followUp: 'Track fatigue level nightly' },
+    ],
+    alerts: [
+      { level: 'Medium', title: 'Burnout watch', detail: 'Sustained high workload for 9 days', date: 'Mar 16' },
+      { level: 'Low', title: 'Check-in reminder', detail: 'Weekly energy log due tomorrow', date: 'Mar 18' },
+    ],
+    lastActive: 'Mar 12, 2026',
   },
 };
 
 const demoTasks: Record<string, DemoTask[]> = {
-  stu_demo_aarohi: [
+  stu_govardhan: [
     {
-      id: 'task_aarohi_1',
-      title: '10-min walk after dinner',
-      description: 'Short recovery break to reset before study block.',
-      isCompleted: false,
-      assignedBy: 'counselor_dimple_wagle',
-    },
-    {
-      id: 'task_aarohi_2',
-      title: 'Sleep log (5 nights)',
-      description: 'Track bedtime and wake time for consistency.',
+      id: 'task_govardhan_1',
+      title: 'Bedtime consistency log',
+      description: 'Track sleep and wake time for 5 nights.',
       isCompleted: false,
       assignedBy: 'counselor_dimple_wagle',
     },
   ],
-  stu_demo_kunal: [
+  stu_harsh: [
     {
-      id: 'task_kunal_1',
-      title: 'Check-in with faculty mentor',
-      description: 'Schedule a 15-min feedback alignment call.',
+      id: 'task_harsh_1',
+      title: 'Pre-evaluation grounding drill',
+      description: 'Practice the 4-7-8 breathing drill before mock sessions.',
       isCompleted: false,
       assignedBy: 'counselor_dimple_wagle',
     },
   ],
-  stu_demo_sana: [
+  stu_isshita: [
     {
-      id: 'task_sana_1',
-      title: 'Boundary script practice',
-      description: 'Rehearse the assertive response twice this week.',
+      id: 'task_isshita_1',
+      title: 'Monthly wellness reflection',
+      description: 'Submit short reflection on routines that are working.',
       isCompleted: false,
       assignedBy: 'counselor_dimple_wagle',
     },
   ],
-  stu_demo_rhea: [
+  stu_isham: [
     {
-      id: 'task_rhea_1',
-      title: 'Delegate two tasks to co-leads',
-      description: 'Offload event logistics to reduce overtime.',
+      id: 'task_isham_1',
+      title: 'Daily safety check-in',
+      description: 'Respond to counselor check-in message every evening.',
+      isCompleted: false,
+      assignedBy: 'counselor_dimple_wagle',
+    },
+  ],
+  stu_anjit: [
+    {
+      id: 'task_anjit_1',
+      title: 'Load balancing plan',
+      description: 'Reassign one project stream and block recovery breaks.',
       isCompleted: false,
       assignedBy: 'counselor_dimple_wagle',
     },
@@ -288,45 +320,45 @@ const STUDIO_KEYS = {
 
 const demoEmailThreads: CounselorEmailThread[] = [
   {
-    id: 'email_thread_aarohi',
+    id: 'email_thread_govardhan',
     counselorId: 'counselor_dimple_wagle',
-    studentId: 'stu_demo_aarohi',
+    studentId: 'CF-2501',
     subject: 'Follow-up on sleep routine',
-    participants: ['counselor@spjimr.edu', 'aarohi.mehta@spjimr.edu'],
+    participants: ['counselor@spjimr.edu', 'pgp25.govardhan@spjimr.org'],
     messages: [
       {
         id: 'email_msg_1',
-        threadId: 'email_thread_aarohi',
+        threadId: 'email_thread_govardhan',
         senderName: 'Ms. Dimple Wagle',
         senderEmail: 'counselor@spjimr.edu',
-        body: 'Hi Aarohi, sharing a short sleep routine checklist. Can you try it for 5 nights and reply with any blockers?',
+        body: 'Hi Govardhan, sharing a short sleep routine checklist. Can you try it for 5 nights and reply with any blockers?',
         timestamp: new Date(Date.now() - 86400000 * 3).toISOString(),
         direction: 'sent',
       },
       {
         id: 'email_msg_2',
-        threadId: 'email_thread_aarohi',
-        senderName: 'Aarohi Mehta',
-        senderEmail: 'aarohi.mehta@spjimr.edu',
-        body: 'Thanks maam, I tried two nights but got late submissions. Will retry this week.',
+        threadId: 'email_thread_govardhan',
+        senderName: 'Govardhan Nair',
+        senderEmail: 'pgp25.govardhan@spjimr.org',
+        body: 'Thanks maam, I started the checklist and will send my log by weekend.',
         timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
         direction: 'received',
       },
     ],
   },
   {
-    id: 'email_thread_kunal',
+    id: 'email_thread_isham',
     counselorId: 'counselor_dimple_wagle',
-    studentId: 'stu_demo_kunal',
-    subject: 'Small wins plan',
-    participants: ['counselor@spjimr.edu', 'kunal.iyer@spjimr.edu'],
+    studentId: 'CF-2504',
+    subject: 'Priority check-in plan',
+    participants: ['counselor@spjimr.edu', 'pgp25.isham@spjimr.org'],
     messages: [
       {
         id: 'email_msg_3',
-        threadId: 'email_thread_kunal',
+        threadId: 'email_thread_isham',
         senderName: 'Ms. Dimple Wagle',
         senderEmail: 'counselor@spjimr.edu',
-        body: 'Hi Kunal, attached a small wins worksheet. Pick 1 task for today and let me know how it feels.',
+        body: 'Hi Isham, please reply to this mail with your current stress level (1-10) and availability for a follow-up slot today.',
         timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString(),
         direction: 'sent',
       },
@@ -432,6 +464,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [showInboxModal, setShowInboxModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showEmailNotificationModal, setShowEmailNotificationModal] = useState(false);
 
   // Input States
   const [taskInput, setTaskInput] = useState('');
@@ -477,6 +510,13 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [emailBody, setEmailBody] = useState('');
   const [emailTarget, setEmailTarget] = useState<'student' | 'group'>('student');
   const [emailGroupId, setEmailGroupId] = useState('');
+  const [emailSelectedStudentIds, setEmailSelectedStudentIds] = useState<string[]>([]);
+  const [emailManualRecipients, setEmailManualRecipients] = useState('');
+  const [emailGroupRecipients, setEmailGroupRecipients] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailNotificationSubject, setEmailNotificationSubject] = useState('Counselor Follow-up Notification');
+  const [emailNotificationBody, setEmailNotificationBody] = useState('');
+  const [isSendingEmailNotification, setIsSendingEmailNotification] = useState(false);
 
   const [reportTemplateId, setReportTemplateId] = useState(reportTemplates[0]?.id || '');
   const [reportSnippets, setReportSnippets] = useState<Record<string, string[]>>({});
@@ -513,7 +553,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
   // Per-student task tracking
   const [studentTasks, setStudentTasks] = useState<{ studentEmail: string; tasks: import('../types').WellnessTask[] }[]>([]);
-  const selectedStudentEmail = students.find(s => (s.casefileId || s.id) === selectedStudent)?.email || '';
+  const selectedStudentEmail = (students.length > 0 ? students : demoStudents).find(s => (s.casefileId || s.id) === selectedStudent)?.email || '';
   const selectedStudentTasks = studentTasks.find(st => st.studentEmail === selectedStudentEmail)?.tasks || [];
 
   const visibleStudents = students.length > 0 ? students : demoStudents;
@@ -627,11 +667,25 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       try {
         const snap = await getDocs(collection(firestoreDb, 'users'));
         const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-        setStudents(allUsers.filter((u: any) => u.role === 'student'));
+        const loadedStudents = allUsers.filter((u: any) => u.role === 'student');
+        setStudents(loadedStudents);
+        if (!selectedStudent) {
+          const first = (loadedStudents.length > 0 ? loadedStudents : demoStudents)[0];
+          if (first) {
+            setSelectedStudent(first.casefileId || first.id);
+          }
+        }
       } catch {
         // Fallback to localStorage if offline
         const allUsers = await db.getAllUsers();
-        setStudents(allUsers.filter(u => u.role === 'student'));
+        const loadedStudents = allUsers.filter(u => u.role === 'student');
+        setStudents(loadedStudents);
+        if (!selectedStudent) {
+          const first = (loadedStudents.length > 0 ? loadedStudents : demoStudents)[0];
+          if (first) {
+            setSelectedStudent(first.casefileId || first.id);
+          }
+        }
       }
       fetchUpdates();
       const [postsData, tasksData, gamesData] = await Promise.all([db.getAllPosts(), db.getCounselorAssignedTasks(), getForgedGames()]);
@@ -856,7 +910,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const handleAssignTask = async () => {
     if (!taskInput.trim() || !selectedStudent) return;
 
-    const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
     if (!student) return;
 
     await db.assignTask(student.email, {
@@ -878,7 +932,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
   const handleClearTask = async (taskId: string) => {
     if (!selectedStudent) return;
-    const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
     if (!student) return;
     await deleteTask(student.email, taskId);
     const updated = await db.getCounselorAssignedTasks();
@@ -886,9 +940,15 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   };
 
   const handleSendFollowUpNudge = async () => {
-    if (!selectedStudent) return;
-    const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
-    if (!student) return;
+    if (!selectedStudent) {
+      console.log('No student selected for follow-up nudge');
+      return;
+    }
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
+    if (!student) {
+      console.log('Student not found for follow-up nudge');
+      return;
+    }
     addNotification(
       `💬 Follow - up nudge sent to ${student.name || student.email} `,
       'success',
@@ -901,6 +961,55 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       'student',
       student.id
     );
+  };
+
+  const openEmailNotificationComposer = () => {
+    if (!selectedStudent) return;
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
+    if (!student?.email) {
+      addNotification('Selected student does not have a valid email.', 'error');
+      return;
+    }
+
+    setEmailNotificationSubject('Counselor Follow-up Notification');
+    setEmailNotificationBody(`Hi ${student.name || 'Student'},\n\nThis is a quick follow-up from your counselor. Please share how you are feeling this week and let me know if you would like to book a support session.\n\nRegards,\nCounseling Team`);
+    setShowEmailNotificationModal(true);
+  };
+
+  const handleSendEmailNotification = async () => {
+    if (!selectedStudent) return;
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
+    if (!student?.email) {
+      addNotification('Selected student does not have a valid email.', 'error');
+      return;
+    }
+
+    if (!emailNotificationSubject.trim() || !emailNotificationBody.trim()) {
+      addNotification('Please enter both subject and body before sending.', 'warning');
+      return;
+    }
+
+    const subject = emailNotificationSubject.trim();
+    const body = emailNotificationBody.trim();
+
+    setIsSendingEmailNotification(true);
+    try {
+      await sendCounselorEmail({
+        to: student.email,
+        subject,
+        text: body,
+      });
+      const thread = ensureThreadForStudent(selectedStudent);
+      sendEmailToThread(thread.id, body, subject);
+      addNotification(`Email notification sent to ${student.name || student.email}.`, 'success');
+      setShowEmailNotificationModal(false);
+      setEmailNotificationBody('');
+    } catch (error: any) {
+      const detail = error?.message ? ` (${error.message})` : '';
+      addNotification(`Failed to send email notification${detail}`, 'error');
+    } finally {
+      setIsSendingEmailNotification(false);
+    }
   };
 
   const handlePublishSlot = async () => {
@@ -1003,23 +1112,110 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     }
   };
 
-  const handleSendEmail = () => {
-    if (!emailBody.trim()) return;
-    if (emailTarget === 'student' && selectedStudent) {
-      const thread = ensureThreadForStudent(selectedStudent);
-      sendEmailToThread(thread.id, emailBody, emailSubject);
-    }
+  const parseEmails = (raw: string): string[] => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return raw
+      .split(/[\n,;]+/)
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => emailRegex.test(value));
+  };
 
-    if (emailTarget === 'group' && emailGroupId) {
-      const groupStudents = visibleStudents.filter(s => s.program === emailGroupId);
-      groupStudents.forEach(student => {
-        const thread = ensureThreadForStudent(student.casefileId || student.id);
-        sendEmailToThread(thread.id, emailBody, emailSubject);
+  const handleSendEmail = async () => {
+    if (!emailBody.trim()) return;
+
+    const recipientMap = new Map<string, { email: string; studentId?: string }>();
+
+    if (emailTarget === 'student') {
+      const selectedIds = emailSelectedStudentIds.length > 0
+        ? emailSelectedStudentIds
+        : (selectedStudent ? [selectedStudent] : []);
+
+      selectedIds.forEach((studentId) => {
+        const student = visibleStudents.find((s) => (s.casefileId || s.id) === studentId);
+        if (!student?.email) return;
+        recipientMap.set(student.email.toLowerCase(), {
+          email: student.email,
+          studentId,
+        });
       });
     }
 
-    setEmailBody('');
-    addNotification('Email sent (mock).', 'success');
+    if (emailTarget === 'group' && emailGroupId) {
+      const groupStudents = visibleStudents.filter((s) => s.program === emailGroupId);
+      groupStudents.forEach((student) => {
+        const studentId = student.casefileId || student.id;
+        if (!student.email) return;
+        recipientMap.set(student.email.toLowerCase(), {
+          email: student.email,
+          studentId,
+        });
+      });
+    }
+
+    parseEmails(emailManualRecipients).forEach((email) => {
+      if (!recipientMap.has(email)) {
+        recipientMap.set(email, { email });
+      }
+    });
+
+    if (emailTarget === 'group') {
+      parseEmails(emailGroupRecipients).forEach((email) => {
+        if (!recipientMap.has(email)) {
+          recipientMap.set(email, { email });
+        }
+      });
+    }
+
+    const recipients = Array.from(recipientMap.values());
+    if (recipients.length === 0) {
+      addNotification('Add at least one valid recipient email.', 'error');
+      return;
+    }
+
+    const normalizedSubject = emailSubject.trim() || selectedEmailThread?.subject || 'Counselor Update';
+    const normalizedBody = emailBody.trim();
+    let sentCount = 0;
+    let failedCount = 0;
+
+    setIsSendingEmail(true);
+    try {
+      for (const recipient of recipients) {
+        try {
+          await sendCounselorEmail({
+            to: recipient.email,
+            subject: normalizedSubject,
+            text: normalizedBody,
+          });
+
+          if (recipient.studentId) {
+            const thread = ensureThreadForStudent(recipient.studentId);
+            sendEmailToThread(thread.id, normalizedBody, normalizedSubject);
+          }
+          sentCount += 1;
+        } catch {
+          failedCount += 1;
+        }
+      }
+
+      if (sentCount > 0) {
+        setEmailBody('');
+        setEmailSubject('');
+      }
+
+      if (sentCount > 0 && failedCount === 0) {
+        addNotification(`Email sent to ${sentCount} recipient${sentCount > 1 ? 's' : ''}.`, 'success');
+        return;
+      }
+
+      if (sentCount > 0 && failedCount > 0) {
+        addNotification(`Email sent to ${sentCount} recipient${sentCount > 1 ? 's' : ''}, ${failedCount} failed.`, 'info');
+        return;
+      }
+
+      addNotification('Email could not be sent. Check server email config.', 'error');
+    } finally {
+      setIsSendingEmail(false);
+    }
   };
 
   const handleSimulateReply = (threadId: string) => {
@@ -1283,7 +1479,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     setTaskDescription('');
     setTaskDueDate('');
 
-    const student = students.find(s => (s.casefileId || s.id) === selectedStudent);
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
     if (student) {
       await db.assignTask(student.email, {
         id: newTask.id,
@@ -1355,6 +1551,30 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     });
 
     return reminders;
+  };
+
+  const sendReminderEmail = async (studentId: string, reminderMessage: string) => {
+    const student = visibleStudents.find(s => (s.casefileId || s.id) === studentId);
+    if (!student?.email) {
+      addNotification('Student email not found for reminder.', 'error');
+      return;
+    }
+
+    const subject = 'Counselor Reminder';
+    const body = `Hello ${student.name || 'Student'},\n\n${reminderMessage}\n\nPlease reply if you need support from the counseling team.`;
+
+    try {
+      await sendCounselorEmail({
+        to: student.email,
+        subject,
+        text: body,
+      });
+      const thread = ensureThreadForStudent(studentId);
+      sendEmailToThread(thread.id, body, subject);
+      addNotification(`Email reminder sent to ${student.name || student.email}.`, 'success');
+    } catch {
+      addNotification('Failed to send reminder email.', 'error');
+    }
   };
 
   const openChatFromInbox = async (studentId: string) => {
@@ -1585,8 +1805,11 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                 }} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-[#8a6b5c] text-white rounded-md hover:bg-[#785a4d] shadow-sm transition-colors disabled:opacity-50">
                   <MessageSquare size={14} /> <span className="hidden xs:inline">Chat</span><span className="xs:hidden">Chat</span>
                 </button>
-                <button onClick={handleSendFollowUpNudge} disabled={!selectedStudent} title="Send a gentle follow-up notification to this student" className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors">
+                <button onClick={handleSendFollowUpNudge} disabled={!selectedStudentRecord} title="Send a gentle follow-up notification to this student" className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors">
                   <Bell size={14} /> <span className="hidden xs:inline">Follow-Up Nudge</span><span className="xs:hidden">Nudge</span>
+                </button>
+                <button onClick={openEmailNotificationComposer} disabled={!selectedStudent} title="Compose email notification to selected student" className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-emerald-100 text-emerald-700 rounded-md hover:bg-emerald-200 disabled:opacity-50 transition-colors">
+                  <Mail size={14} /> <span className="hidden xs:inline">Email Notify</span><span className="xs:hidden">Email</span>
                 </button>
               </div>
             </div>
@@ -2207,18 +2430,60 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                           Group
                         </button>
                       </div>
-                      {emailTarget === 'group' && (
-                        <select
-                          value={emailGroupId}
-                          onChange={(e) => setEmailGroupId(e.target.value)}
-                          className="w-full mt-3 border border-slate-200 rounded-lg px-2 py-2 text-xs"
-                        >
-                          <option value="">Select program group</option>
-                          {programGroups.map(group => (
-                            <option key={group.id} value={group.id}>{group.name}</option>
-                          ))}
-                        </select>
+                      {emailTarget === 'student' && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-[11px] font-semibold text-slate-500">Select one or more students</p>
+                          <div className="max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg p-2 space-y-1">
+                            {visibleStudents.map((student) => {
+                              const studentId = student.casefileId || student.id;
+                              const checked = emailSelectedStudentIds.includes(studentId);
+                              return (
+                                <label key={student.id} className="flex items-center justify-between gap-2 text-xs text-slate-600 px-1 py-1 rounded hover:bg-slate-50">
+                                  <span className="truncate">{student.name} • {student.email}</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      setEmailSelectedStudentIds((prev) =>
+                                        e.target.checked
+                                          ? Array.from(new Set([...prev, studentId]))
+                                          : prev.filter((id) => id !== studentId)
+                                      );
+                                    }}
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[10px] text-slate-400">If none selected, current case-file student is used.</p>
+                        </div>
                       )}
+                      {emailTarget === 'group' && (
+                        <div className="mt-3 space-y-2">
+                          <select
+                            value={emailGroupId}
+                            onChange={(e) => setEmailGroupId(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                          >
+                            <option value="">Select program group</option>
+                            {programGroups.map(group => (
+                              <option key={group.id} value={group.id}>{group.name}</option>
+                            ))}
+                          </select>
+                          <input
+                            value={emailGroupRecipients}
+                            onChange={(e) => setEmailGroupRecipients(e.target.value)}
+                            placeholder="Extra group emails (comma-separated)"
+                            className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                          />
+                        </div>
+                      )}
+                      <input
+                        value={emailManualRecipients}
+                        onChange={(e) => setEmailManualRecipients(e.target.value)}
+                        placeholder="Additional emails (comma-separated)"
+                        className="w-full mt-3 border border-slate-200 rounded-lg px-2 py-2 text-xs"
+                      />
                     </div>
 
                     <div className="bg-white rounded-xl border border-slate-200 p-3">
@@ -2266,9 +2531,10 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                         </button>
                         <button
                           onClick={handleSendEmail}
-                          className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg"
+                          disabled={isSendingEmail}
+                          className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg disabled:opacity-60"
                         >
-                          Send Email
+                          {isSendingEmail ? 'Sending...' : 'Send Email'}
                         </button>
                       </div>
                     </div>
@@ -2623,11 +2889,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                           <div className="flex gap-2">
                             <button
                               onClick={() => {
-                                const thread = emailThreads.find(t => t.studentId === reminder.studentId);
-                                if (thread) {
-                                  sendEmailToThread(thread.id, `Reminder: ${reminder.message}`, 'Reminder');
-                                  addNotification('Email reminder sent (mock).', 'success');
-                                }
+                                sendReminderEmail(reminder.studentId, `Reminder: ${reminder.message}`);
                               }}
                               className="px-3 py-1.5 text-xs font-bold bg-slate-100 rounded-lg"
                             >
@@ -2646,6 +2908,34 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEmailNotificationModal && (
+        <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl p-6 w-full max-w-xl shadow-xl">
+            <h3 className="font-bold text-lg mb-1 text-slate-700">Send Email Notification</h3>
+            <p className="text-xs text-slate-500 mb-4">To: {selectedStudentRecord?.name || 'Selected student'} • {selectedStudentRecord?.email || '-'}</p>
+            <input
+              value={emailNotificationSubject}
+              onChange={(e) => setEmailNotificationSubject(e.target.value)}
+              placeholder="Email subject"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs mb-3"
+            />
+            <textarea
+              value={emailNotificationBody}
+              onChange={(e) => setEmailNotificationBody(e.target.value)}
+              placeholder="Write your email body..."
+              rows={7}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowEmailNotificationModal(false)} disabled={isSendingEmailNotification} className="px-4 py-2 text-slate-500 text-sm disabled:opacity-50">Cancel</button>
+              <button onClick={handleSendEmailNotification} disabled={isSendingEmailNotification} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold disabled:opacity-60">
+                {isSendingEmailNotification ? 'Sending...' : 'Send Email'}
+              </button>
             </div>
           </div>
         </div>
