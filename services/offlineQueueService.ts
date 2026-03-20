@@ -5,7 +5,6 @@
 
 import React from 'react';
 import { P2PMessage } from '../types';
-import * as chatService from './chatService';
 
 const OFFLINE_QUEUE_KEY = 'speakup_offline_queue';
 const PENDING_SENDS_KEY = 'speakup_pending_sends';
@@ -84,8 +83,7 @@ export async function syncOfflineQueue(
         continue;
       }
 
-      // Send message
-      await chatService.sendP2PMessage(offlineMsg.message);
+      // Legacy P2P offline send removed. Socket.IO chat handles its own connection resilience.
 
       offlineMsg.status = 'synced';
       synced++;

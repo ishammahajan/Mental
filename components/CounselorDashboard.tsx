@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import EnvironmentWidget from './EnvironmentWidget';
 import CounselorReportModal from './CounselorReportModal';
+import ChatWidget from './ChatWidget';
 import { Shield, Users, Clock, Calendar as CalendarIcon, FileText, CheckCircle2, CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, MessageSquare, ClipboardList, Trash2, LogOut, Bell, PlusCircle, Newspaper, Settings, MoreVertical, X, Download, ShieldAlert, Zap, XCircle, ArrowRight, BookOpen, Lock, Video, Phone, Mail, Pin, Star, Hash, Share2, Printer, LineChart as ChartIcon, Wand2, Activity, Send, Edit2, Bot } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import * as db from '../services/storage';
-import * as chat from '../services/chatService';
 import { deleteTask } from '../services/storage';
 import { uploadGamePDF, getForgedGames, GameMetadata } from '../services/ragService';
 import {
@@ -467,7 +467,6 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [showEmailNotificationModal, setShowEmailNotificationModal] = useState(false);
 
   // Input States
-  const [taskInput, setTaskInput] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<P2PMessage[]>([]);
 
@@ -635,13 +634,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       setStudentTasks(await db.getCounselorAssignedTasks());
     }
     if (changedKey.startsWith('speakup_cloud_p2p')) {
-      const convos = await chat.getCounselorConversations(counselorId);
-      setConversations(convos);
-      setTotalUnread(convos.reduce((acc, c) => acc + c.unreadCount, 0));
-      // Instantly refresh the active P2P chat window
-      if (selectedStudent) {
-        setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
-      }
+      // P2P handled by Socket.IO
     }
   });
 
@@ -649,16 +642,12 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   useEffect(() => {
     const fetchUpdates = async () => {
       // Fetch Inbox Data
-      const convos = await chat.getCounselorConversations(counselorId);
+      const convos: any[] = [];
       setConversations(convos);
-      const unread = convos.reduce((acc, curr) => acc + curr.unreadCount, 0);
+      const unread = 0;
       setTotalUnread(unread);
 
-      // Fetch active chat details if open
-      if (showChatModal && selectedStudent) {
-        await chat.markThreadAsRead(counselorId, selectedStudent);
-        setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
-      }
+      // Active chat details handled by Socket.IO
     };
 
     const interval = setInterval(fetchUpdates, 3000);
@@ -907,26 +896,50 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
 
 
-  const handleAssignTask = async () => {
-    if (!taskInput.trim() || !selectedStudent) return;
+  const handleAssignNewWellnessTask = async () => {
+    if (!selectedStudent || !taskTitle.trim() || !taskDueDate) {
+      addNotification('Please fill in title and due date.', 'warning');
+      return;
+    }
 
     const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
     if (!student) return;
 
+    const newTaskId = `ctask_${Date.now()}`;
+
+    // 1. Create Counselor Tracking Record
+    const newTask: CounselorTaskItem = {
+      id: newTaskId,
+      counselorId: counselorId || 'demo_counselor_dimple',
+      studentId: student.id,
+      title: taskTitle.trim(),
+      description: taskDescription.trim() || 'Assigned follow-up.',
+      assignedAt: new Date().toISOString(),
+      dueAt: new Date(taskDueDate).toISOString(),
+    };
+    
+    setCounselorTasks(prev => [newTask, ...prev]);
+    saveCounselorTask(newTask).catch(() => {});
+
+    // 2. Assign to Student's DB
     await db.assignTask(student.email, {
-      id: Date.now().toString(),
-      title: taskInput.trim(),
-      description: 'Prescribed activity.',
+      id: newTaskId,
+      title: newTask.title,
+      description: newTask.description,
       isCompleted: false,
       assignedBy: 'counselor_dimple_wagle',
     });
 
-    // Instantly refresh casefile without waiting for next poll
+    // 3. Refresh Tracking View
     const updated = await db.getCounselorAssignedTasks();
     setStudentTasks(updated);
 
-    setTaskInput('');
+    // 4. Reset & Close UI
+    setTaskTitle('');
+    setTaskDescription('');
+    setTaskDueDate('');
     setShowTaskModal(false);
+
     addNotification(`Task assigned to ${student.name || student.email} ✅`, 'success');
   };
 
@@ -1055,17 +1068,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   };
 
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || !selectedStudent) return;
-    await chat.sendP2PMessage({
-      id: Date.now().toString(),
-      senderId: counselorId,
-      receiverId: selectedStudent,
-      text: chatInput,
-      timestamp: new Date().toISOString(),
-      isRead: false
-    });
-    setChatInput('');
-    setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
+    // Legacy handleSendMessage replaced by ChatWidget
   };
 
   const ensureThreadForStudent = (studentId: string) => {
@@ -1257,7 +1260,9 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const handleGenerateReport = () => {
     if (!selectedStudent || !selectedCaseData || !activeReportTemplate) return;
     const snippets = reportSnippets[selectedStudent] || [];
-    const taskCount = counselorTasks.filter(t => t.studentId === selectedStudent && !t.completedAt).length;
+    const selectedStudentUid = selectedStudentRecord?.id || selectedStudent;
+    const selectedStudentEmail = selectedStudentRecord?.email;
+    const taskCount = counselorTasks.filter(t => (t.studentId === selectedStudentEmail || t.studentId === selectedStudentUid || t.studentId === selectedStudent) && !t.completedAt).length;
     const surveySummary = buildSurveySummary(selectedStudent);
 
     const report: CounselorReport = {
@@ -1458,49 +1463,10 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     if (!selectedStudent) return;
     const summary = buildSurveySummary(selectedStudent);
     if (!summary) return;
-    await chat.sendP2PMessage({
-      id: Date.now().toString(),
-      senderId: counselorId,
-      receiverId: selectedStudent,
-      text: `Survey update: ${summary}`,
-      timestamp: new Date().toISOString(),
-      isRead: false,
-    });
-    setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
     addNotification('Survey summary sent to chat (mock).', 'success');
   };
 
-  const handleCreateTask = async () => {
-    if (!selectedStudent || !taskTitle.trim() || !taskDueDate) return;
-    const newTask: CounselorTaskItem = {
-      id: `ctask_${Date.now()}`,
-      counselorId,
-      studentId: selectedStudent,
-      title: taskTitle.trim(),
-      description: taskDescription.trim() || 'Assigned follow-up.',
-      assignedAt: new Date().toISOString(),
-      dueAt: new Date(taskDueDate).toISOString(),
-    };
-    setCounselorTasks(prev => [newTask, ...prev]);
-    saveCounselorTask(newTask).catch(() => {});
-    setTaskTitle('');
-    setTaskDescription('');
-    setTaskDueDate('');
-
-    const student = visibleStudents.find(s => (s.casefileId || s.id) === selectedStudent);
-    if (student) {
-      await db.assignTask(student.email, {
-        id: newTask.id,
-        title: newTask.title,
-        description: newTask.description,
-        isCompleted: false,
-        assignedBy: 'counselor_dimple_wagle',
-      });
-      const updated = await db.getCounselorAssignedTasks();
-      setStudentTasks(updated);
-    }
-    addNotification('Task assigned (mock).', 'success');
-  };
+  // (Removed old scattered UI handleCreateTask logic, replaced by handleAssignNewWellnessTask)
 
   const markTaskCompleted = (taskId: string) => {
     const completedAt = new Date().toISOString();
@@ -1593,8 +1559,6 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     setShowEmailNotificationModal(false);
     setShowInboxModal(false);
     setShowChatModal(true);
-    await chat.markThreadAsRead(counselorId, studentId);
-    setChatHistory(await chat.getP2PThread(counselorId, studentId));
   };
 
   const openChatFromInbox = async (studentId: string) => {
@@ -2855,7 +2819,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                       onChange={(e) => setTaskDueDate(e.target.value)}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs"
                     />
-                    <button onClick={handleCreateTask} className="w-full bg-[#8a6b5c] text-white text-xs font-bold py-2 rounded-lg">
+                    <button onClick={handleAssignNewWellnessTask} className="w-full bg-[#8a6b5c] text-white text-xs font-bold py-2 rounded-lg">
                       Assign Task
                     </button>
                   </div>
@@ -2863,7 +2827,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                   <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
                     <p className="text-xs font-bold text-slate-600 mb-2">Task Tracker</p>
                     <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {counselorTasks.filter(t => t.studentId === selectedStudent).map(task => {
+                      {counselorTasks.filter(t => t.studentId === selectedStudentRecord?.email || t.studentId === (selectedStudentRecord?.id || selectedStudent) || t.studentId === selectedStudent).map(task => {
                         const status = getTaskStatus(task);
                         return (
                           <div key={task.id} className="bg-white border border-slate-200 rounded-lg p-3 text-xs">
@@ -2880,7 +2844,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                           </div>
                         );
                       })}
-                      {counselorTasks.filter(t => t.studentId === selectedStudent).length === 0 && (
+                      {counselorTasks.filter(t => t.studentId === selectedStudentRecord?.email || t.studentId === (selectedStudentRecord?.id || selectedStudent) || t.studentId === selectedStudent).length === 0 && (
                         <p className="text-xs text-slate-400">No tasks assigned yet.</p>
                       )}
                     </div>
@@ -2961,15 +2925,29 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
         <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-xl p-6 w-96 shadow-xl">
             <h3 className="font-bold text-lg mb-4 text-slate-700">Assign Wellness Task</h3>
+            <p className="text-xs text-slate-500 mb-3">Student: {selectedStudentRecord?.name || 'Select a student'}</p>
+            <input
+              value={taskTitle}
+              onChange={(e) => setTaskTitle(e.target.value)}
+              placeholder="Task title"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:ring-2 focus:ring-blue-100"
+            />
             <textarea
-              value={taskInput}
-              onChange={(e) => setTaskInput(e.target.value)}
-              placeholder="Describe the task (e.g. 'Take a 15min walk without phone')..."
-              className="w-full h-32 p-3 border border-gray-200 rounded-lg mb-4 outline-none focus:ring-2 focus:ring-blue-100"
+              value={taskDescription}
+              onChange={(e) => setTaskDescription(e.target.value)}
+              placeholder="Task details"
+              rows={3}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:ring-2 focus:ring-blue-100"
+            />
+            <input
+              type="date"
+              value={taskDueDate}
+              onChange={(e) => setTaskDueDate(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-4 outline-none focus:ring-2 focus:ring-blue-100"
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 text-slate-500 text-sm">Cancel</button>
-              <button onClick={handleAssignTask} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold">Assign</button>
+              <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 text-slate-500 text-sm font-semibold">Cancel</button>
+              <button onClick={handleAssignNewWellnessTask} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 transition-colors text-white rounded-lg text-sm font-bold shadow-sm">Assign</button>
             </div>
           </div>
         </div>
@@ -3076,30 +3054,14 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
         </div>
       )}
 
-      {/* Chat Modal */}
-      {showChatModal && (
-        <div className="fixed bottom-6 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-[300] pointer-events-auto border border-gray-200 animate-in slide-in-from-bottom duration-300">
-          <div className="p-4 bg-[var(--color-elevated)] text-[var(--color-text)] rounded-t-xl flex justify-between items-center">
-            <h3 className="font-bold text-sm">Chat: {(() => {
-              const s = students.find(st => (st.casefileId || st.id) === selectedStudent);
-              return s ? `${s.name} (${s.casefileId || s.id})` : selectedStudent;
-            })()}</h3>
-            <button onClick={() => setShowChatModal(false)}><XCircle size={18} /></button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-            {chatHistory.map(m => (
-              <div key={m.id} className={`flex ${m.senderId === counselorId ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.senderId === counselorId ? 'bg-[#8a6b5c] text-white shadow-sm' : 'bg-white border border-gray-200 text-slate-700 shadow-sm'}`}>
-                  {m.text}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="p-3 border-t border-gray-200 flex gap-2">
-            <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendMessage(); } }} className="flex-1 border rounded px-2 text-sm outline-none" placeholder="Type..." />
-            <button onClick={handleSendMessage} className="bg-blue-600 text-white p-2 rounded"><Send size={16} /></button>
-          </div>
-        </div>
+      {/* Chat Modal via Socket.IO */}
+      {showChatModal && selectedStudent && (
+        <ChatWidget
+          currentUserId={counselorId || 'counselor_dimple_wagle'}
+          targetUserId={students.find(st => (st.casefileId || st.id) === selectedStudent)?.email || selectedStudentRecord?.email || selectedStudent}
+          targetUserName={students.find(st => (st.casefileId || st.id) === selectedStudent)?.name || 'Student'}
+          onClose={() => setShowChatModal(false)}
+        />
       )}
 
       {/* Counselor Report Modal */}

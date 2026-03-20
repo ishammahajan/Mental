@@ -25,8 +25,9 @@ import {
   WellnessPost,
 } from '../types';
 import ConsentForm from './ConsentForm';
+import ChatWidget from './ChatWidget';
 import * as db from '../services/storage';
-import * as chat from '../services/chatService';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useSParsh } from '../contexts/SParshContext';
 import { useNotification } from '../contexts/NotificationContext';
 import OnboardingTour from './OnboardingTour';
@@ -305,13 +306,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       setPosts(await db.getAllPosts());
     }
     if (changedKey.startsWith('speakup_cloud_p2p')) {
-      if (showP2P && selectedCounselor) {
-        setP2PMessages(await chat.getP2PThread(userId, selectedCounselor.email || selectedCounselor.id));
-        await chat.markThreadAsRead(userId, selectedCounselor.email || selectedCounselor.id);
-        setUnreadP2P(0);
-      } else {
-        setUnreadP2P(await chat.getUnreadP2PCount(userId));
-      }
+      // P2P handled by Socket.IO
     }
   });
 
@@ -331,17 +326,17 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
     const loadData = async () => {
       setIsCloudSyncing(true);
-      const [history, tasksData, postsData, initialUnread, forgedData] = await Promise.all([
+      const [history, tasksData, postsData, forgedData] = await Promise.all([
         db.getChatHistory(userId),
         db.getTasks(userEmail),
         db.getAllPosts(),
-        chat.getUnreadP2PCount(userId),
         getForgedGames()
       ]);
       setMessages(history);
       setTasks(tasksData);
       setPosts(postsData);
       setForgedGames(forgedData || {});
+      const initialUnread = 0;
 
       // Follow-up nudge: only for students who have a prior confirmed booking
       const dismissedUntil = localStorage.getItem(`speakup_nudge_dismissed_${userId}`);
@@ -359,13 +354,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     // Polling for P2P and posts (slots handled by Firestore subscribeToSlots)
     const interval = setInterval(async () => {
       setPosts(await db.getAllPosts());
-      if (showP2P) {
-        await chat.markThreadAsRead(userId, selectedCounselor?.email || selectedCounselor?.id || COUNSELORS[0].email);
-        setUnreadP2P(0);
-        setP2PMessages(await chat.getP2PThread(userId, selectedCounselor?.email || selectedCounselor?.id || COUNSELORS[0].email));
-      } else {
-        setUnreadP2P(await chat.getUnreadP2PCount(userId));
-      }
+      // P2P state handled via Socket.IO hook
     }, 5000);
     return () => clearInterval(interval);
   }, [userId, userEmail, showP2P, selectedCounselor]);
@@ -448,14 +437,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
   const handleCrisis = async () => {
     triggerCrisis();
-    await chat.sendP2PMessage({
-      id: Date.now().toString(),
-      senderId: 'system',
-      receiverId: selectedCounselor?.email || selectedCounselor?.id || COUNSELORS[0].email,
-      text: `🚨 EMERGENCY ALERT: ${studentName} (${userEmail}) triggered the SParsh Crisis Protocol. Immediate attention required.`,
-      timestamp: new Date().toISOString(),
-      isRead: false
-    });
+    // Emergency alert will be dispatched by backend or via system socket
   };
 
   const processMessageSend = async (textToSend: string) => {
@@ -676,51 +658,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
   };
 
   const handleP2PSend = async () => {
-    if (!p2pInput.trim()) return;
-
-    // Validate counselor selection - CRITICAL for proper message routing
-    if (!selectedCounselor) {
-      addNotification("Please select a counselor first", "warning");
-      return;
-    }
-
-    // Use counselor's email as unique identifier (more reliable than frontend constant ID)
-    const receiverId = selectedCounselor.email || selectedCounselor.id;
-
-    // 1. Save message to DB
-    await chat.sendP2PMessage({
-      id: Date.now().toString(),
-      senderId: userId,
-      receiverId: receiverId,
-      text: p2pInput,
-      timestamp: new Date().toISOString(),
-      isRead: false
-    });
-
-    // 2. Clear input & Optimistically update UI
-    const sentText = p2pInput;
-    setP2PInput('');
-    
-    // Small delay to allow Firebase/storage to sync
-    await new Promise(resolve => setTimeout(resolve, 100));
-    setP2PMessages(await chat.getP2PThread(userId, receiverId));
-
-    // 3. Background AI Crisis Detection with correct receiver ID
-    detectCrisisInText(sentText).then(async (result) => {
-      if (result.isCrisis) {
-        console.warn('CRISIS DETECTED BY AI:', result.reason);
-        triggerCrisis();
-        // Send alert to actual counselor email
-        await chat.sendP2PMessage({
-          id: Date.now().toString() + '_sys',
-          senderId: 'system',
-          receiverId: receiverId,  // Use same ID as regular P2P
-          text: `🚨 URGENT AI ALERT: Potential crisis detected for ${studentName}. Reason: ${result.reason}`,
-          timestamp: new Date().toISOString(),
-          isRead: false
-        });
-      }
-    });
+    // Replaced by ChatWidget implementation
   };
 
   const openSlots = slots.filter(s => s.status === 'open');
@@ -757,10 +695,6 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           <div className="relative">
             <button onClick={async () => {
               setShowP2P(true);
-              if (selectedCounselor) {
-                await chat.markThreadAsRead(userId, selectedCounselor.email || selectedCounselor.id);
-                setUnreadP2P(0);
-              }
             }} className="neu-icon-btn p-3 rounded-full text-[#2e2a27]">
               <MessageSquare size={20} />
             </button>
@@ -848,30 +782,14 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           </div>
         )}
 
-        {/* P2P Chat */}
-        {showP2P && (
-          <div className="fixed bottom-24 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[550px] z-[300] pointer-events-auto bg-white rounded-2xl shadow-2xl border border-[var(--border-subtle)] flex flex-col animate-in slide-in-from-bottom duration-300 overflow-hidden">
-            <div className="p-4 border-b border-[var(--border-subtle)] flex flex-col justify-center items-center bg-[var(--color-elevated)] relative">
-              <button onClick={() => setShowP2P(false)} className="absolute right-4 top-4 bg-white p-2 rounded-full shadow-sm hover:scale-105 transition-all"><XCircle className="text-[var(--color-text-secondary)] hover:text-[var(--color-error)]" size={24} /></button>
-              <h3 className="font-black text-[var(--color-text)] text-lg">Chat with {selectedCounselor?.name ?? 'Counsellor'}</h3>
-              <p className="text-xs text-[var(--color-text-secondary)] mb-3 font-medium">🛡️ End-to-End Encrypted</p>
-              <button onClick={() => { setShowP2P(false); setShowCounselorPicker(true); }} className="px-4 py-2 bg-[#f1e6df] border border-[var(--border-subtle)] shadow-sm rounded-xl text-sm text-[var(--color-text)] hover:bg-[#8a6b5c] hover:text-white transition-colors font-bold flex items-center gap-2">🔄 Switch Counsellor</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {p2pMessages.map(m => (
-                <div key={m.id} className={`flex ${m.senderId === userId ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-3 rounded-xl text-sm ${m.senderId === userId ? 'bg-[#8a6b5c] text-white' : 'bg-white text-[var(--color-text-secondary)] border border-[var(--border-subtle)]'}`}>{m.text}</div>
-                </div>
-              ))}
-              {p2pMessages.length === 0 && <p className="text-center text-slate-400 text-xs mt-10">Start a secure conversation with your counselor.</p>}
-            </div>
-            <div className="p-4 bg-white">
-              <div className="flex gap-2">
-                <input type="text" value={p2pInput} onChange={e => setP2PInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleP2PSend(); } }} placeholder="Type a message..." className="flex-1 p-2 rounded-lg border border-gray-300 outline-none" />
-                <button onClick={handleP2PSend} className="bg-[#8a6b5c] text-white p-2 rounded-lg"><Send size={18} /></button>
-              </div>
-            </div>
-          </div>
+        {/* P2P Chat via Socket.IO */}
+        {showP2P && selectedCounselor && (
+          <ChatWidget
+            currentUserId={userEmail}
+            targetUserId={selectedCounselor.email || selectedCounselor.id}
+            targetUserName={selectedCounselor.name}
+            onClose={() => setShowP2P(false)}
+          />
         )}
 
         {/* ── Main Content ───────────────────────────────────────────────── */}
@@ -1710,7 +1628,6 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                   setSelectedCounselor(c);
                   setShowCounselorPicker(false);
                   setShowP2P(true);
-                  setP2PMessages(await chat.getP2PThread(userId, c.id));
                 }}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-[#8a6b5c] hover:bg-[#8a6b5c]/5 transition-all text-left">
                   <div className="w-12 h-12 rounded-full bg-[#8a6b5c] flex items-center justify-center text-white font-bold flex-shrink-0">{c.avatar}</div>

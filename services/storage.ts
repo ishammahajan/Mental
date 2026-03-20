@@ -311,35 +311,52 @@ export const createSlot = async (slot: AppointmentSlot) => {
 };
 
 // --- Wellness Tasks ---
+const normalizeTaskOwnerKey = (studentEmail: string): string =>
+  (studentEmail || '').trim().toLowerCase();
+
 export const getTasks = async (studentEmail: string): Promise<WellnessTask[]> => {
   await networkDelay();
   const allTasks = cloudGet<Record<string, WellnessTask[]>>(CLOUD_KEYS.TASKS, {});
-  return allTasks[studentEmail] || [];
+  const normalizedEmail = normalizeTaskOwnerKey(studentEmail);
+  return allTasks[normalizedEmail] || allTasks[studentEmail] || [];
 };
 
 export const assignTask = async (studentEmail: string, task: WellnessTask) => {
   await networkDelay();
   const allTasks = cloudGet<Record<string, WellnessTask[]>>(CLOUD_KEYS.TASKS, {});
-  const studentTasks = allTasks[studentEmail] || [];
+  const normalizedEmail = normalizeTaskOwnerKey(studentEmail);
+  const legacyTasks = allTasks[studentEmail] || [];
+  const studentTasks = allTasks[normalizedEmail] || legacyTasks;
   studentTasks.push(task);
-  allTasks[studentEmail] = studentTasks;
+  allTasks[normalizedEmail] = studentTasks;
+  if (studentEmail !== normalizedEmail && allTasks[studentEmail]) {
+    delete allTasks[studentEmail];
+  }
   cloudSet(CLOUD_KEYS.TASKS, allTasks);
 };
 
 export const toggleTaskCompletion = async (studentEmail: string, taskId: string) => {
   const allTasks = cloudGet<Record<string, WellnessTask[]>>(CLOUD_KEYS.TASKS, {});
-  const studentTasks = allTasks[studentEmail] || [];
+  const normalizedEmail = normalizeTaskOwnerKey(studentEmail);
+  const studentTasks = allTasks[normalizedEmail] || allTasks[studentEmail] || [];
   const updatedTasks = studentTasks.map(t =>
     t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t
   );
-  allTasks[studentEmail] = updatedTasks;
+  allTasks[normalizedEmail] = updatedTasks;
+  if (studentEmail !== normalizedEmail && allTasks[studentEmail]) {
+    delete allTasks[studentEmail];
+  }
   cloudSet(CLOUD_KEYS.TASKS, allTasks);
 };
 
 export const deleteTask = async (studentEmail: string, taskId: string): Promise<void> => {
   const allTasks = cloudGet<Record<string, WellnessTask[]>>(CLOUD_KEYS.TASKS, {});
-  const studentTasks = allTasks[studentEmail] || [];
-  allTasks[studentEmail] = studentTasks.filter(t => t.id !== taskId);
+  const normalizedEmail = normalizeTaskOwnerKey(studentEmail);
+  const studentTasks = allTasks[normalizedEmail] || allTasks[studentEmail] || [];
+  allTasks[normalizedEmail] = studentTasks.filter(t => t.id !== taskId);
+  if (studentEmail !== normalizedEmail && allTasks[studentEmail]) {
+    delete allTasks[studentEmail];
+  }
   cloudSet(CLOUD_KEYS.TASKS, allTasks);
 };
 

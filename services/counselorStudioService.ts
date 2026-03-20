@@ -472,6 +472,12 @@ export const saveCounselorTask = async (task: CounselorTaskItem): Promise<void> 
     const tasks = localGet<CounselorTaskItem[]>(LOCAL_KEYS.TASKS, []);
     const updated = mergeById([...tasks.filter(t => t.id !== task.id), task]);
     localSet(LOCAL_KEYS.TASKS, updated);
+    if (typeof BroadcastChannel !== 'undefined') {
+      new BroadcastChannel('speakup_sync').postMessage({ key: LOCAL_KEYS.TASKS });
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new StorageEvent('storage', { key: LOCAL_KEYS.TASKS }));
+    }
     return;
   }
   await setDoc(doc(firestoreDb, TASKS, task.id), task, { merge: true });

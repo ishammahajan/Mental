@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Brain, Send, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { generateCognitiveReframe } from '../services/geminiService';
-import MarkdownRenderer from './MarkdownRenderer';
 
 interface Props {
     onBack: () => void;
@@ -13,6 +12,16 @@ export default function CognitiveReframer({ onBack }: Props) {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState(false);
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+    const resultRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (result && !isAnalyzing) {
+            requestAnimationFrame(() => {
+                resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
+    }, [result, isAnalyzing]);
 
     const handleAnalyze = async () => {
         if (!thought.trim()) return;
@@ -54,7 +63,7 @@ export default function CognitiveReframer({ onBack }: Props) {
                 </div>
             </div>
 
-            <div className="p-6 md:p-8 flex-1 overflow-y-auto space-y-8 bg-slate-50/50">
+            <div ref={scrollContainerRef} className="p-6 md:p-8 flex-1 overflow-y-auto space-y-8 bg-slate-50/50">
 
                 <div className="space-y-4">
                     <label className="block text-sm font-bold text-slate-700">
@@ -111,13 +120,11 @@ export default function CognitiveReframer({ onBack }: Props) {
                 )}
 
                 {result && (
-                    <div className="bg-white border text-sm md:text-base border-purple-100 rounded-2xl p-6 md:p-8 shadow-sm animate-in slide-in-from-bottom-4 fade-in duration-500">
+                    <div ref={resultRef} className="bg-white border text-sm md:text-base border-purple-100 rounded-2xl p-6 md:p-8 shadow-sm animate-in slide-in-from-bottom-4 fade-in duration-500">
                         <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <Sparkles className="text-purple-500" size={20} /> AI Perspective
                         </h3>
-                        <div className="prose prose-purple max-w-none prose-p:leading-relaxed prose-li:my-1 prose-strong:text-slate-800 text-slate-600">
-                            <MarkdownRenderer text={result} />
-                        </div>
+                        <p className="text-slate-600 leading-relaxed whitespace-pre-line">{result}</p>
 
                         <div className="mt-8 pt-6 border-t border-slate-100">
                             <p className="text-sm font-semibold text-slate-700 mb-4">After reading this, how strongly do you believe your original thought now?</p>

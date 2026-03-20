@@ -37,6 +37,9 @@ export interface P2PMessage {
   text: string;
   timestamp: string;
   isRead: boolean;
+  clientMessageId?: string;
+  pending?: boolean;
+  failed?: boolean;
 }
 
 export interface StudentMetric {

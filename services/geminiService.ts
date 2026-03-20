@@ -243,12 +243,15 @@ export const getAIWeatherSuggestion = async (weather: WeatherData): Promise<stri
 // ─── Phase 3 AI Features ──────────────────────────────────────────────────────
 export const generateCognitiveReframe = async (thought: string): Promise<string | null> => {
   const systemPrompt = `You are a clinical psychology assistant specializing in Cognitive Behavioral Therapy (CBT).
-The user will provide a negative automatic thought.
-Your task:
-1. Identify the primary cognitive distortion (e.g., Catastrophizing, Black-and-White Thinking, Overgeneralization, Personalization).
-2. Explain briefly why this distortion applies.
-3. Provide 3 alternative, balanced reframes for the thought.
-Be empathetic, professional, concise, and use Markdown formatting.`;
+The user will provide one negative automatic thought.
+
+Respond with ONE concise reframe only.
+Rules:
+1. Focus on the single strongest distortion only (do not list multiple distortions).
+2. Keep wording close to the user's original sentence, but make it more balanced and realistic.
+3. Output 2-4 short sentences total in plain text.
+4. Do not use headings, bullets, numbering, markdown, or labels.
+5. Keep a warm and natural tone, not clinical jargon.`;
 
   const messages = buildMessages(systemPrompt, [], thought);
   let rawText = await tryHuggingFaceDirect(messages);
@@ -257,7 +260,19 @@ Be empathetic, professional, concise, and use Markdown formatting.`;
     rawText = await tryProxy(messages);
   }
 
-  return rawText;
+  if (!rawText) return null;
+
+  const cleaned = rawText
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+[.)]\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`(.*?)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return cleaned;
 };
 
 export const extractJournalThemes = async (journalText: string): Promise<string | null> => {
