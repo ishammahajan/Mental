@@ -293,6 +293,165 @@ Provide a short, 2-3 sentence strategic analysis and identify the primary risk f
     }
 });
 
+// 5. Extract Survey Questions (Simple HF Prompt)
+router.post('/extract-questions', async (req, res) => {
+    try {
+        const { sourceText, maxQuestions = 8, defaultScale = 5 } = req.body || {};
+        if (!sourceText || typeof sourceText !== 'string') {
+            return res.status(400).json({ error: 'sourceText is required' });
+        }
+
+        const limit = Math.max(1, Math.min(Number(maxQuestions) || 8, 12));
+        const scale = [3, 5, 7].includes(Number(defaultScale)) ? Number(defaultScale) : 5;
+        const minCount = Math.min(limit, Math.max(2, Math.floor(limit / 2)));
+        const sanitized = sourceText
+            .replace(/\r/g, '\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim()
+            .slice(0, 18000);
+
+        const buildMeanings = (s) => Array.from({ length: s }, (_, i) => `Score ${i + 1}`);
+
+        const parseArrayPayload = (raw) => {
+            if (!raw || typeof raw !== 'string') return null;
+            let text = raw.trim();
+            if (text.startsWith('```json')) {
+                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            }
+            const match = text.match(/\[[\s\S]*\]/);
+            if (!match) return null;
+            try {
+                const parsed = JSON.parse(match[0]);
+                return Array.isArray(parsed) ? parsed : null;
+            } catch {
+                return null;
+            }
+        };
+
+        const normalizeQuestions = (items) => {
+            if (!Array.isArray(items)) return [];
+            const seen = new Set();
+            return items
+                .filter((item) => typeof item?.text === 'string' && item.text.trim().length > 0)
+                .map((item) => {
+                    const itemScale = [3, 5, 7].includes(Number(item?.scale)) ? Number(item.scale) : scale;
+                    const cleaned = String(item.text).replace(/\s+/g, ' ').trim().slice(0, 220);
+                    const meanings = Array.isArray(item?.meanings) && item.meanings.length === itemScale
+                        ? item.meanings.map((m) => String(m))
+                        : buildMeanings(itemScale);
+                    return { text: cleaned, scale: itemScale, meanings };
+                })
+                .filter((item) => {
+                    const key = item.text.toLowerCase();
+                    if (!key || seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                })
+                .slice(0, limit);
+        };
+
+            const buildHeuristicQuestions = () => {
+                return Array.from(new Set(
+                sanitized
+                    .split(/[?!.]\s+/)
+                    .map((s) => s.replace(/\s+/g, ' ').trim())
+                    .filter((s) => s.length >= 25 && s.length <= 170)
+                ))
+                .slice(0, limit)
+                .map((text) => ({ text, scale, meanings: buildMeanings(scale) }));
+            };
+
+        const callHF = async (prompt, maxTokens = 900, temperature = 0.1) => {
+            const { default: fetch } = await import('node-fetch');
+            const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${HF_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: CHAT_MODEL,
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: maxTokens,
+                    temperature,
+                })
+            });
+            if (!response.ok) {
+                const detail = await response.text();
+                throw new Error(`HuggingFace extraction request failed (${response.status}): ${detail}`);
+            }
+            const data = await response.json();
+            return data?.choices?.[0]?.message?.content?.trim() || '';
+        };
+
+        const prompt = `Extract survey items from the source text.
+Return ONLY a JSON array (no markdown, no prose).
+
+Schema per item:
+{ "text": string, "scale": number, "meanings": string[] }
+
+Hard requirements:
+- Return between ${minCount} and ${limit} items.
+- Do NOT merge multiple source questions into one item.
+- Keep each text concise (max 160 chars).
+- scale must be 3, 5, or 7. Prefer ${scale}.
+- meanings length must exactly equal scale.
+- If labels are missing, output: Score 1..Score N.
+
+Source text:
+${sanitized}`;
+
+        let normalized = [];
+        try {
+            const firstRaw = await callHF(prompt);
+            const firstParsed = parseArrayPayload(firstRaw);
+            normalized = normalizeQuestions(firstParsed);
+        } catch (err) {
+            console.warn('[Extract Questions] HF unavailable, using heuristic fallback.', err?.message || err);
+            normalized = buildHeuristicQuestions();
+            return res.json({ questions: normalized, fallback: true, reason: 'hf_unavailable' });
+        }
+
+        if (normalized.length <= 1) {
+            const repairPrompt = `The previous extraction returned too few items or merged content.
+Split the source into multiple distinct survey items.
+Return ONLY a JSON array with between ${minCount} and ${limit} items.
+
+Use schema:
+{ "text": string, "scale": number, "meanings": string[] }
+
+Do not include markdown or explanations.
+
+Source text:
+${sanitized}`;
+
+            try {
+                const repairRaw = await callHF(repairPrompt, 950, 0.15);
+                const repairParsed = parseArrayPayload(repairRaw);
+                const repaired = normalizeQuestions(repairParsed);
+                if (repaired.length > normalized.length) {
+                    normalized = repaired;
+                }
+            } catch (err) {
+                console.warn('[Extract Questions] HF repair pass failed, keeping current extraction.', err?.message || err);
+            }
+        }
+
+        if (normalized.length <= 1) {
+            const heuristic = buildHeuristicQuestions();
+
+            if (heuristic.length > normalized.length) {
+                normalized = heuristic;
+            }
+        }
+
+        return res.json({ questions: normalized });
+    } catch (error) {
+        console.error('[Extract Questions Error]', error);
+        return res.status(500).json({ error: error.message || 'Internal extraction error' });
+    }
+});
+
 // 3. Get all forged games
 router.get('/games', (req, res) => {
     res.json(global.gamesMetadata);

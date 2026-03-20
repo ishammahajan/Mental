@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import {
   collection,
   doc,
@@ -26,6 +25,10 @@ import {
   DEMO_RESPONSES,
   DEMO_SURVEYS,
 } from '../data/demoData';
+
+const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || '';
+const HF_ROUTER_URL = 'https://router.huggingface.co/v1/chat/completions';
+const HF_CHAT_MODEL = 'Qwen/Qwen2.5-7B-Instruct';
 
 const EMAIL_THREADS = 'counselor_email_threads';
 const REPORTS = 'counselor_reports';
@@ -123,9 +126,6 @@ const subscribeLocal = <T,>(
   };
 };
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const gemini = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
-
 const mergeById = <T extends { id: string }>(values: T[]): T[] => {
   const map = new Map<string, T>();
   values.forEach((value) => map.set(value.id, value));
@@ -144,34 +144,6 @@ const buildScaleMeanings = (scale: number): string[] => {
   return Array.from({ length: scale }, (_, i) => `Score ${i + 1}: ${i + 1 === scale ? 'High' : 'Moderate'}`);
 };
 
-const chunkText = (text: string, chunkSize: number, overlap: number): string[] => {
-  if (chunkSize <= 0) return [text];
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length);
-    chunks.push(text.slice(start, end));
-    start = end - overlap;
-    if (start < 0) start = 0;
-    if (start >= text.length) break;
-  }
-  return chunks;
-};
-
-const cosineSimilarity = (a: number[], b: number[]): number => {
-  if (a.length !== b.length || a.length === 0) return 0;
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  if (magA === 0 || magB === 0) return 0;
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
-};
-
 const extractQuestionsHeuristic = (text: string, limit: number): string[] => {
   const lines = text
     .replace(/\r/g, '\n')
@@ -186,34 +158,6 @@ const extractQuestionsHeuristic = (text: string, limit: number): string[] => {
   return unique.slice(0, limit);
 };
 
-const parseQuestionPayload = (payload: string): Array<{ text: string; scale?: number; meanings?: string[] }> => {
-  const firstJsonMatch = payload.match(/\[[\s\S]*\]/);
-  if (!firstJsonMatch) return [];
-  try {
-    const parsed = JSON.parse(firstJsonMatch[0]);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(item => typeof item?.text === 'string')
-      .map(item => ({
-        ...item,
-        scale: typeof item?.scale === 'string' ? Number(item.scale) : item?.scale,
-      }));
-  } catch {
-    return [];
-  }
-};
-
-const sendGeminiPrompt = async (prompt: string): Promise<string> => {
-  if (!gemini) {
-    throw new Error('VITE_GEMINI_API_KEY is not set. Gemini extraction is unavailable.');
-  }
-  const response = await gemini.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-  });
-  return response.text || '';
-};
-
 export const extractForgeQuestionsFromText = async (
   sourceText: string,
   options?: { maxQuestions?: number; defaultScale?: number }
@@ -225,52 +169,81 @@ export const extractForgeQuestionsFromText = async (
   const sanitizedText = sourceText.replace(/\s+/g, ' ').trim();
   if (!sanitizedText) return [];
 
-  const chunks = chunkText(sanitizedText, 900, 150);
-  let selectedChunks = chunks.slice(0, 6);
   try {
-    const { generateEmbedding } = await import('./pineconeService');
-    const queryEmbedding = await generateEmbedding('survey questions, Likert scale statements, assessment items');
-    const scored = await Promise.all(chunks.map(async (chunk) => ({
-      chunk,
-      score: cosineSimilarity(queryEmbedding, await generateEmbedding(chunk)),
-    })));
-    selectedChunks = scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6)
-      .map(s => s.chunk);
+    if (!HF_TOKEN) throw new Error('VITE_HF_TOKEN is not set');
+
+    const minCount = Math.min(maxQuestions, Math.max(2, Math.floor(maxQuestions / 2)));
+    const prompt = `Extract survey items from the source text.
+Return ONLY a JSON array (no markdown, no prose).
+
+Schema per item:
+{ "text": string, "scale": number, "meanings": string[] }
+
+Hard requirements:
+- Return between ${minCount} and ${maxQuestions} items.
+- Do NOT merge multiple source questions into one item.
+- Keep each text concise (max 160 chars).
+- scale must be 3, 5, or 7. Prefer ${defaultScale}.
+- meanings length must exactly equal scale.
+- If labels are missing, output: Score 1..Score N.
+
+Source text:
+${sanitizedText.slice(0, 18000)}`;
+
+    const res = await fetch(HF_ROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${HF_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: HF_CHAT_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 900,
+        temperature: 0.15,
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(detail || `HuggingFace extraction failed with status ${res.status}`);
+    }
+
+    const data = await res.json();
+    let raw = data?.choices?.[0]?.message?.content?.trim() || '';
+    if (raw.startsWith('```json')) {
+      raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+    }
+
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('Model returned invalid JSON payload');
+
+    const parsed = JSON.parse(match[0]);
+    const extractedQuestions = Array.isArray(parsed) ? parsed : [];
+
+    if (extractedQuestions.length > 0) {
+      return extractedQuestions.map((item: { text: string; scale?: number; meanings?: string[] }, index: number) => {
+        const scale = normalizeScale(item?.scale, defaultScale);
+        const meanings = Array.isArray(item?.meanings) && item.meanings.length === scale
+          ? item.meanings
+          : buildScaleMeanings(scale);
+        return {
+          id: `q${index + 1}`,
+          text: String(item.text || '').trim(),
+          scale,
+          meanings,
+        };
+      }).filter((q: ForgeQuestion) => q.text.length > 0);
+    }
   } catch (error) {
-    console.warn('[Forge RAG] Embedding retrieval failed, using leading chunks.', error);
+    console.warn('[Forge Extract] Direct HF extraction failed, using heuristic fallback.', error);
   }
 
-  const prompt = `Extract survey questions and options from the text below.
-Return ONLY valid JSON (no markdown, no commentary) as an array of objects with keys: text, scale, meanings.
-- text: a concise question or statement suitable for a Likert scale.
-- scale: 3, 5, or 7 (default to ${defaultScale}).
-- meanings: array of labels/options for each scale point; if options are not explicit, infer simple labels.
-
-Context:
-${selectedChunks.map((chunk, idx) => `--- CHUNK ${idx + 1} ---\n${chunk}`).join('\n')}
-
-Extract up to ${maxQuestions} questions.`;
-
-  let raw = '';
-  try {
-    raw = await sendGeminiPrompt(prompt);
-  } catch (error) {
-    console.warn('[Forge RAG] Gemini extraction failed, using heuristic fallback.', error);
-  }
-
-  const parsed = raw ? parseQuestionPayload(raw) : [];
-  const questionTexts = parsed.length > 0
-    ? parsed.map(item => item.text)
-    : extractQuestionsHeuristic(sanitizedText, maxQuestions);
+  const questionTexts = extractQuestionsHeuristic(sanitizedText, maxQuestions);
 
   return questionTexts.map((text, index) => {
-    const source = parsed.find(item => item.text === text);
-    const scale = normalizeScale(source?.scale, defaultScale);
-    const meanings = Array.isArray(source?.meanings) && source?.meanings.length === scale
-      ? source.meanings
-      : buildScaleMeanings(scale);
+    const scale = defaultScale;
+    const meanings = buildScaleMeanings(scale);
     return {
       id: `q${index + 1}`,
       text,

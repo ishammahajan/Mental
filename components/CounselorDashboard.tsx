@@ -530,6 +530,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   const [forgeSourceText, setForgeSourceText] = useState('');
   const [forgePdfFile, setForgePdfFile] = useState<File | null>(null);
   const [isForgeExtracting, setIsForgeExtracting] = useState(false);
+  const [forgeProcessingStatus, setForgeProcessingStatus] = useState<string | null>(null);
   const [forgeExtractError, setForgeExtractError] = useState<string | null>(null);
   const [forgeQuestions, setForgeQuestions] = useState<ForgeQuestion[]>([]);
   const [forgeSurveys, setForgeSurveys] = useState<ForgeSurvey[]>([]);
@@ -1313,15 +1314,17 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     return text.trim();
   };
 
-  const handleForgeFileChange = async (file: File | null) => {
+  const handleForgeFileChange = async (file: File | null): Promise<string> => {
     setForgePdfFile(file);
     setForgeFileName(file?.name || '');
     setForgeExtractError(null);
     if (!file) {
       setForgeSourceText('');
-      return;
+      setForgeProcessingStatus(null);
+      return '';
     }
     setIsForgeExtracting(true);
+    setForgeProcessingStatus('Reading PDF text...');
     try {
       const text = await extractPdfText(file);
       if (!text) {
@@ -1329,34 +1332,39 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
         setForgeExtractError('No readable text found in this PDF. If this is a scanned file, text extraction will be empty without OCR.');
       }
       setForgeSourceText(text);
+      return text;
     } catch (error) {
       console.warn('[Forge Extract] PDF text extraction failed.', error);
       setForgeExtractError(`PDF text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       addNotification('PDF text extraction failed. Try a different file.', 'error');
+      return '';
     } finally {
       setIsForgeExtracting(false);
+      setForgeProcessingStatus(null);
     }
   };
 
   const handleForgeExtract = async () => {
     setForgeExtractError(null);
+    setForgeProcessingStatus(null);
     if (!forgeFileName.trim() && !forgeSourceText.trim()) {
       setForgeExtractError('Please upload a PDF or paste text before extracting questions.');
       addNotification('Select a PDF or paste text before extracting questions.', 'warning');
       return;
     }
-    if (!forgeSourceText.trim() && forgePdfFile) {
-      setIsForgeExtracting(true);
-      await handleForgeFileChange(forgePdfFile);
+    let sourceText = forgeSourceText.trim();
+    if (!sourceText && forgePdfFile) {
+      sourceText = (await handleForgeFileChange(forgePdfFile)).trim();
     }
-    if (!forgeSourceText.trim()) {
+    if (!sourceText) {
       setForgeExtractError('No PDF text available. Upload a text-based PDF or paste text manually.');
       addNotification('Please provide readable PDF text before extracting questions.', 'warning');
       return;
     }
     try {
       setIsForgeExtracting(true);
-      const extracted = await extractForgeQuestionsFromText(forgeSourceText, { maxQuestions: 8, defaultScale: 5 });
+      setForgeProcessingStatus('Running RAG retrieval and LLM extraction...');
+      const extracted = await extractForgeQuestionsFromText(sourceText, { maxQuestions: 8, defaultScale: 5 });
       if (extracted.length === 0) {
         setForgeExtractError('No questions were found in the extracted text. Try a different file or edit the text.');
         addNotification('No questions found in the provided text.', 'warning');
@@ -1377,6 +1385,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       addNotification('Question extraction failed. Please try again.', 'error');
     } finally {
       setIsForgeExtracting(false);
+      setForgeProcessingStatus(null);
     }
   };
 
@@ -2679,12 +2688,17 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                           {forgeExtractError}
                         </div>
                       )}
+                      {isForgeExtracting && forgeProcessingStatus && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-[11px] px-3 py-2">
+                          {forgeProcessingStatus}
+                        </div>
+                      )}
                       <button
                         onClick={handleForgeExtract}
                         disabled={isForgeExtracting}
                         className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        {isForgeExtracting ? 'Processing PDF...' : 'Extract Questions (RAG + LLM)'}
+                        {isForgeExtracting ? 'Processing...' : 'Extract Questions (RAG + LLM)'}
                       </button>
                     </div>
                   )}
