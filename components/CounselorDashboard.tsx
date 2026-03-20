@@ -51,6 +51,10 @@ import {
   updateCounselorTaskCompletion,
   deleteCounselorTask,
   upsertEmailThread,
+  subscribeToPosts,
+  createFirebasePost,
+  deleteFirebasePost,
+  togglePinFirebasePost,
 } from '../services/counselorStudioService';
 import { sendCounselorEmail } from '../services/emailService';
 
@@ -624,15 +628,17 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     const unsub = subscribeToSlots((updatedSlots) => {
       setSlots(updatedSlots);
     });
-    return () => unsub();
+    const unsubPosts = subscribeToPosts((updatedPosts) => {
+      setPosts(updatedPosts);
+    });
+    return () => {
+      unsub();
+      unsubPosts();
+    };
   }, []);
 
   // ── Real-time cross-tab sync — fires instantly when student tab changes localStorage
   useStorageSync(async (changedKey) => {
-
-    if (changedKey.startsWith('speakup_cloud_posts')) {
-      setPosts(await db.getAllPosts());
-    }
     if (changedKey.startsWith('speakup_cloud_tasks')) {
       // Instant casefile task refresh when student tab updates
       setStudentTasks(await db.getCounselorAssignedTasks());
@@ -681,8 +687,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
         }
       }
       fetchUpdates();
-      const [postsData, tasksData, gamesData] = await Promise.all([db.getAllPosts(), db.getCounselorAssignedTasks(), getForgedGames()]);
-      setPosts(postsData);
+      const [tasksData, gamesData] = await Promise.all([db.getCounselorAssignedTasks(), getForgedGames()]);
       setStudentTasks(tasksData);
       setForgedGames(gamesData);
     };
@@ -796,8 +801,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
       postedAt: new Date().toISOString(),
       isPinned: postPinned,
     };
-    await db.createPost(newPost);
-    setPosts(await db.getAllPosts());
+    await createFirebasePost(newPost);
     setPostTitle('');
     setPostBody('');
     setPostPinned(false);
@@ -806,14 +810,12 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
   };
 
   const handleDeletePost = async (postId: string) => {
-    await db.deletePost(postId);
-    setPosts(await db.getAllPosts());
+    await deleteFirebasePost(postId);
     addNotification('Post removed', 'info');
   };
 
-  const handleTogglePin = async (postId: string) => {
-    await db.togglePinPost(postId);
-    setPosts(await db.getAllPosts());
+  const handleTogglePin = async (post: WellnessPost) => {
+    await togglePinFirebasePost(post.id, post.isPinned);
   };
 
   const handleForgeQuest = async () => {
@@ -1385,7 +1387,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     const assignedStudentIds: string[] = [];
     const assignedGroupIds: string[] = [];
     if (forgeAssignTarget === 'student' && selectedStudentRecord) {
-      const studentId = selectedStudentRecord.casefileId || selectedStudentRecord.id;
+      const studentId = selectedStudentRecord.id;
       assignments.push({ type: 'student', id: studentId, name: selectedStudentRecord.name });
       assignedStudentIds.push(studentId);
     }
@@ -1408,34 +1410,6 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     setSelectedSurveyId(survey.id);
     setForgeStep('results');
     saveForgeSurvey(survey).catch(() => {});
-  };
-
-  const handleSimulateResponses = (survey: ForgeSurvey) => {
-    const assignedStudents = new Set<string>();
-    survey.assignedTo.forEach(a => {
-      if (a.type === 'student') {
-        assignedStudents.add(a.id);
-      } else {
-        visibleStudents.filter(s => s.program === a.id).forEach(s => assignedStudents.add(s.casefileId || s.id));
-      }
-    });
-
-    const newResponses: ForgeResponse[] = Array.from(assignedStudents).map(studentId => ({
-      id: `response_${survey.id}_${studentId}_${Date.now()}`,
-      surveyId: survey.id,
-      studentId,
-      submittedAt: new Date().toISOString(),
-      answers: survey.questions.map(q => ({
-        questionId: q.id,
-        score: Math.max(1, Math.min(q.scale, Math.floor(Math.random() * q.scale) + 1)),
-      })),
-    }));
-
-    setForgeResponses(prev => [...newResponses, ...prev]);
-    newResponses.forEach(response => {
-      saveForgeResponse(response).catch(() => {});
-    });
-    addNotification('Survey responses stored (mock).', 'success');
   };
 
   const handleSendSurveyToChat = async () => {
@@ -2199,7 +2173,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                         <div className="flex justify-between items-start gap-1">
                           <p className="font-bold text-slate-700 leading-snug flex-1">{post.isPinned && '📌 '}{post.title}</p>
                           <div className="flex gap-1 flex-shrink-0">
-                            <button onClick={() => handleTogglePin(post.id)} title={post.isPinned ? 'Unpin' : 'Pin'} className="text-amber-500 hover:text-amber-700 p-0.5"><Pin size={12} /></button>
+                            <button onClick={() => handleTogglePin(post)} title={post.isPinned ? 'Unpin' : 'Pin'} className="text-amber-500 hover:text-amber-700 p-0.5"><Pin size={12} /></button>
                             <button onClick={() => handleDeletePost(post.id)} title="Delete" className="text-red-400 hover:text-red-600 p-0.5"><Trash2 size={12} /></button>
                           </div>
                         </div>
@@ -2740,7 +2714,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                               <button onClick={() => setSelectedSurveyId(survey.id)} className="text-xs text-slate-500">View</button>
                             </div>
                             <div className="flex gap-2 mt-2">
-                              <button onClick={() => handleSimulateResponses(survey)} className="px-3 py-1.5 text-xs font-bold bg-slate-100 rounded-lg">Simulate Responses</button>
+                              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded">Awaiting Responses via Firebase</span>
                             </div>
                           </div>
                         ))}

@@ -354,13 +354,6 @@ export const subscribeReportsForStudent = (
 };
 
 export const saveForgeSurvey = async (survey: ForgeSurvey): Promise<void> => {
-  if (isDemoMode()) {
-    ensureCounselorStudioSeeded();
-    const surveys = localGet<ForgeSurvey[]>(LOCAL_KEYS.SURVEYS, []);
-    const updated = mergeById([...surveys.filter(s => s.id !== survey.id), survey]);
-    localSet(LOCAL_KEYS.SURVEYS, updated);
-    return;
-  }
   await setDoc(doc(firestoreDb, SURVEYS, survey.id), survey, { merge: true });
 };
 
@@ -368,14 +361,6 @@ export const subscribeForgeSurveysForCounselor = (
   counselorId: string,
   callback: (surveys: ForgeSurvey[]) => void,
 ): Unsubscribe => {
-  if (isDemoMode()) {
-    ensureCounselorStudioSeeded();
-    return subscribeLocal<ForgeSurvey>(
-      LOCAL_KEYS.SURVEYS,
-      (surveys) => surveys.filter(s => s.counselorId === counselorId),
-      callback,
-    );
-  }
   const q = query(collection(firestoreDb, SURVEYS), where('counselorId', '==', counselorId));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => d.data() as ForgeSurvey));
@@ -387,17 +372,6 @@ export const subscribeForgeSurveysForStudent = (
   programId: string | undefined,
   callback: (surveys: ForgeSurvey[]) => void,
 ): Unsubscribe => {
-  if (isDemoMode()) {
-    ensureCounselorStudioSeeded();
-    return subscribeLocal<ForgeSurvey>(
-      LOCAL_KEYS.SURVEYS,
-      (surveys) => surveys.filter(s =>
-        (s.assignedStudentIds || []).includes(studentId) ||
-        (programId ? (s.assignedGroupIds || []).includes(programId) : false)
-      ),
-      callback,
-    );
-  }
   const baseCollection = collection(firestoreDb, SURVEYS);
   const unsubs: Unsubscribe[] = [];
   let studentSurveys: ForgeSurvey[] = [];
@@ -421,13 +395,6 @@ export const subscribeForgeSurveysForStudent = (
 };
 
 export const saveForgeResponse = async (response: ForgeResponse): Promise<void> => {
-  if (isDemoMode()) {
-    ensureCounselorStudioSeeded();
-    const responses = localGet<ForgeResponse[]>(LOCAL_KEYS.RESPONSES, []);
-    const updated = mergeById([...responses.filter(r => r.id !== response.id), response]);
-    localSet(LOCAL_KEYS.RESPONSES, updated);
-    return;
-  }
   await setDoc(doc(firestoreDb, RESPONSES, response.id), response, { merge: true });
 };
 
@@ -435,14 +402,6 @@ export const subscribeForgeResponsesForCounselor = (
   surveyId: string,
   callback: (responses: ForgeResponse[]) => void,
 ): Unsubscribe => {
-  if (isDemoMode()) {
-    ensureCounselorStudioSeeded();
-    return subscribeLocal<ForgeResponse>(
-      LOCAL_KEYS.RESPONSES,
-      (responses) => responses.filter(r => r.surveyId === surveyId),
-      callback,
-    );
-  }
   const q = query(collection(firestoreDb, RESPONSES), where('surveyId', '==', surveyId));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => d.data() as ForgeResponse));
@@ -453,14 +412,6 @@ export const subscribeForgeResponsesForStudent = (
   studentId: string,
   callback: (responses: ForgeResponse[]) => void,
 ): Unsubscribe => {
-  if (isDemoMode()) {
-    ensureCounselorStudioSeeded();
-    return subscribeLocal<ForgeResponse>(
-      LOCAL_KEYS.RESPONSES,
-      (responses) => responses.filter(r => r.studentId === studentId),
-      callback,
-    );
-  }
   const q = query(collection(firestoreDb, RESPONSES), where('studentId', '==', studentId));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => d.data() as ForgeResponse));
@@ -543,4 +494,36 @@ export const subscribeCounselorTasksForStudent = (
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => d.data() as CounselorTaskItem));
   });
+};
+
+/* --- WELLNESS POSTS --- */
+import { WellnessPost } from '../types';
+const POSTS = 'counselor_posts';
+
+export const subscribeToPosts = (
+  callback: (posts: WellnessPost[]) => void,
+): Unsubscribe => {
+  const q = query(collection(firestoreDb, POSTS));
+  // We handle sorting (pinned first, then chronological) client-side
+  return onSnapshot(q, (snap) => {
+    const rawPosts = snap.docs.map((d) => d.data() as WellnessPost);
+    callback(
+      rawPosts.sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
+      })
+    );
+  });
+};
+
+export const createFirebasePost = async (post: WellnessPost): Promise<void> => {
+  await setDoc(doc(firestoreDb, POSTS, post.id), post);
+};
+
+export const deleteFirebasePost = async (postId: string): Promise<void> => {
+  await deleteDoc(doc(firestoreDb, POSTS, postId));
+};
+
+export const togglePinFirebasePost = async (postId: string, currentPinStatus: boolean): Promise<void> => {
+  await updateDoc(doc(firestoreDb, POSTS, postId), { isPinned: !currentPinStatus });
 };

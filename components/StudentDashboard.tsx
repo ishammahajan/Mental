@@ -44,6 +44,7 @@ import {
   subscribeForgeResponsesForStudent,
   subscribeForgeSurveysForStudent,
   subscribeReportsForStudent,
+  subscribeToPosts,
   updateCounselorTaskCompletion,
   upsertEmailThread,
 } from '../services/counselorStudioService';
@@ -302,9 +303,6 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     if (changedKey.startsWith('speakup_cloud_tasks')) {
       setTasks(await db.getTasks(userEmail));
     }
-    if (changedKey.startsWith('speakup_cloud_posts')) {
-      setPosts(await db.getAllPosts());
-    }
     if (changedKey.startsWith('speakup_cloud_p2p')) {
       // P2P handled by Socket.IO
     }
@@ -326,15 +324,13 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
     const loadData = async () => {
       setIsCloudSyncing(true);
-      const [history, tasksData, postsData, forgedData] = await Promise.all([
+      const [history, tasksData, forgedData] = await Promise.all([
         db.getChatHistory(userId),
         db.getTasks(userEmail),
-        db.getAllPosts(),
         getForgedGames()
       ]);
       setMessages(history);
       setTasks(tasksData);
-      setPosts(postsData);
       setForgedGames(forgedData || {});
       const initialUnread = 0;
 
@@ -350,14 +346,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
       setIsCloudSyncing(false);
     };
     loadData();
-
-    // Polling for P2P and posts (slots handled by Firestore subscribeToSlots)
-    const interval = setInterval(async () => {
-      setPosts(await db.getAllPosts());
-      // P2P state handled via Socket.IO hook
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [userId, userEmail, showP2P, selectedCounselor]);
+  }, [userEmail, userId]);
 
   // ── Real-time Firestore slot subscription (instant cross-device updates)
   useEffect(() => {
@@ -423,12 +412,16 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
     const unsubTasks = subscribeCounselorTasksForStudent(userId, (tasksData) => {
       setCounselorTasksSync(tasksData);
     });
+    const unsubPosts = subscribeToPosts((postsData) => {
+      setPosts(postsData);
+    });
     return () => {
       unsubThreads();
       unsubSurveys();
       unsubResponses();
       unsubReports();
       unsubTasks();
+      unsubPosts();
     };
   }, [userId, studentProgram, selectedEmailThreadId]);
 
