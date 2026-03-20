@@ -3077,7 +3077,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
       {/* Chat Modal */}
       {showChatModal && (
-        <div className="absolute bottom-4 right-4 w-96 h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-50 border border-gray-200 animate-in slide-in-from-bottom duration-300">
+        <div className="fixed bottom-6 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-50 border border-gray-200 animate-in slide-in-from-bottom duration-300">
           <div className="p-4 bg-[var(--color-elevated)] text-[var(--color-text)] rounded-t-xl flex justify-between items-center">
             <h3 className="font-bold text-sm">Chat: {(() => {
               const s = students.find(st => (st.casefileId || st.id) === selectedStudent);

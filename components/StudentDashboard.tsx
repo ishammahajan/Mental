@@ -865,7 +865,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
               ))}
               {p2pMessages.length === 0 && <p className="text-center text-slate-400 text-xs mt-10">Start a secure conversation with your counselor.</p>}
             </div>
-            <div className="p-4 bg-white/50">
+            <div className="p-4 bg-white">
               <div className="flex gap-2">
                 <input type="text" value={p2pInput} onChange={e => setP2PInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleP2PSend(); } }} placeholder="Type a message..." className="flex-1 p-2 rounded-lg border border-gray-300 outline-none" />
                 <button onClick={handleP2PSend} className="bg-[#8a6b5c] text-white p-2 rounded-lg"><Send size={18} /></button>
@@ -1563,11 +1563,11 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
       {/* ── Chat Window ───────────────────────────────────────────────────── */}
       {isChatOpen && (
-        <div className="fixed bottom-24 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[550px] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl flex flex-col z-50 animate-in slide-in-from-bottom-10 duration-500 border border-slate-200">
+        <div className="fixed bottom-24 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[550px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 animate-in slide-in-from-bottom-10 duration-500 border border-slate-200">
           <div className="p-3 border-b flex justify-between items-center bg-[#8a6b5c]/10 rounded-t-2xl">
             <div className="flex items-center gap-2">
               <span className="font-bold text-[#2e2a27]">SParsh AI</span>
-              <span className="flex items-center gap-1 text-[10px] text-slate-400 bg-white/70 px-2 py-0.5 rounded-full border border-slate-200">
+              <span className="flex items-center gap-1 text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded-full border border-slate-200">
                 <Lock size={9} /> Free API · Locally Encrypted
               </span>
             </div>
