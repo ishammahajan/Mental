@@ -818,7 +818,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar */}
         <div className="w-64 bg-[var(--color-elevated)] border-r border-[var(--border-subtle)] p-6 flex-col hidden md:flex">
           <div className="space-y-4">
@@ -850,7 +850,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
 
         {/* P2P Chat */}
         {showP2P && (
-          <div className="absolute inset-0 z-40 bg-[var(--color-bg)] flex flex-col animate-in slide-in-from-bottom duration-300">
+          <div className="absolute inset-0 z-[300] pointer-events-auto bg-[var(--color-bg)] flex flex-col animate-in slide-in-from-bottom duration-300">
             <div className="p-4 border-b border-[var(--border-subtle)] flex flex-col justify-center items-center bg-[var(--color-elevated)] relative">
               <button onClick={() => setShowP2P(false)} className="absolute right-4 top-4 bg-white p-2 rounded-full shadow-sm hover:scale-105 transition-all"><XCircle className="text-[var(--color-text-secondary)] hover:text-[var(--color-error)]" size={24} /></button>
               <h3 className="font-black text-[var(--color-text)] text-lg">Chat with {selectedCounselor?.name ?? 'Counsellor'}</h3>

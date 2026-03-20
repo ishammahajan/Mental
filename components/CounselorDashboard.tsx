@@ -563,8 +563,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     ? getCaseData(selectedStudentRecord.casefileId || selectedStudentRecord.id, selectedStudentRecord.name || 'Student')
     : null;
   const isDemoMode = students.length === 0;
-  const demoTasksForSelected = selectedStudentRecord ? demoTasks[selectedStudentRecord.id] || [] : [];
-  const effectiveSelectedTasks = isDemoMode ? demoTasksForSelected : selectedStudentTasks;
+  const effectiveSelectedTasks = selectedStudentTasks;
 
   const programGroups: { id: string; name: string }[] = Array.from(
     new Map<string, { id: string; name: string }>(
