@@ -1586,16 +1586,20 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
     }
   };
 
-  const openChatFromInbox = async (studentId: string) => {
+  const openCounselorChat = async (studentId: string) => {
     setSelectedStudent(studentId);
-    const convo = conversations.find(c => c.studentId === studentId);
-    if (convo) {
-      await chat.markThreadAsRead(counselorId, convo.studentId);
-      setChatHistory(await chat.getP2PThread(counselorId, convo.studentId));
-    }
+    setShowInboxModal(false);
+    setShowTaskModal(false);
+    setShowScheduleModal(false);
+    setShowEmailNotificationModal(false);
     setShowInboxModal(false);
     setShowChatModal(true);
+    await chat.markThreadAsRead(counselorId, studentId);
     setChatHistory(await chat.getP2PThread(counselorId, studentId));
+  };
+
+  const openChatFromInbox = async (studentId: string) => {
+    await openCounselorChat(studentId);
   };
 
   // Calendar Helpers
@@ -1806,10 +1810,8 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
                   <ClipboardList size={14} /> <span className="hidden xs:inline">Assign Task</span><span className="xs:hidden">Task</span>
                 </button>
                 <button onClick={async () => {
-                  setShowChatModal(true);
                   if (selectedStudent) {
-                    await chat.markThreadAsRead(counselorId, selectedStudent);
-                    setChatHistory(await chat.getP2PThread(counselorId, selectedStudent));
+                    await openCounselorChat(selectedStudent);
                   }
                 }} disabled={!selectedStudent} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm bg-[#8a6b5c] text-white rounded-md hover:bg-[#785a4d] shadow-sm transition-colors disabled:opacity-50">
                   <MessageSquare size={14} /> <span className="hidden xs:inline">Chat</span><span className="xs:hidden">Chat</span>
@@ -3077,7 +3079,7 @@ const CounselorDashboard: React.FC<CounselorProps> = ({ onLogout }) => {
 
       {/* Chat Modal */}
       {showChatModal && (
-        <div className="fixed bottom-6 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-50 border border-gray-200 animate-in slide-in-from-bottom duration-300">
+        <div className="fixed bottom-6 right-4 md:right-8 w-full max-w-[92vw] sm:max-w-96 h-[65vh] max-h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-[300] pointer-events-auto border border-gray-200 animate-in slide-in-from-bottom duration-300">
           <div className="p-4 bg-[var(--color-elevated)] text-[var(--color-text)] rounded-t-xl flex justify-between items-center">
             <h3 className="font-bold text-sm">Chat: {(() => {
               const s = students.find(st => (st.casefileId || st.id) === selectedStudent);
