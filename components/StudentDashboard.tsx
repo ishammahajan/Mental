@@ -758,7 +758,7 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
           <div className="space-y-4">
             <button onClick={() => setActiveTab('home')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'home' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Home size={20} /> Home</button>
             <button onClick={() => setActiveTab('tasks')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'tasks' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><CheckSquare size={20} /> Tasks</button>
-            <button onClick={() => setActiveTab('inbox')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'inbox' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><MessageSquare size={20} /> Counselor Inbox</button>
+           
             <button onClick={() => setActiveTab('surveys')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'surveys' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Sword size={20} /> Surveys</button>
             <button onClick={() => setActiveTab('reports')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'reports' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><Download size={20} /> Reports</button>
             <button onClick={() => setActiveTab('journal')} className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${activeTab === 'journal' ? 'neu-pressed text-[#8a6b5c]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-soft)]'}`}><PenTool size={20} /> Journal</button>
@@ -1124,86 +1124,28 @@ const StudentDashboard: React.FC<Props> = ({ triggerCrisis, userEmail, userId, u
                 </div>
 
                 {/* ── Counsellor-Assigned Tasks ── */}
-                <div>
-                  <h3 className="font-bold text-slate-600 text-base mb-3">Assigned by Counsellor</h3>
-                  {tasks.filter(t => t.assignedBy !== 'system').length === 0 && (
-                    <p className="text-center text-slate-400 text-sm py-4">No tasks assigned yet by your counsellor.</p>
-                  )}
-                  <div className="space-y-4">
-                    {tasks.filter(t => t.assignedBy !== 'system').map(task => (
-                      <div key={task.id} onClick={() => toggleTask(task.id)} className={`p-4 rounded-2xl flex items-center gap-4 transition-all cursor-pointer ${task.isCompleted ? 'neu-pressed opacity-60' : 'neu-flat'}`}>
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.isCompleted ? 'border-[#8a6b5c] bg-[#8a6b5c]' : 'border-slate-400'}`}>
-                          {task.isCompleted && <CheckSquare size={14} className="text-white" />}
-                        </div>
-                        <div>
-                          <h4 className={`font-bold ${task.isCompleted ? 'text-slate-400 line-through' : 'text-[#2e2a27]'}`}>{task.title}</h4>
-                          <p className="text-xs text-slate-400">Assigned by {task.assignedBy}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* ── COUNSELOR INBOX TAB ───────────────────────────────── */}
-            {activeTab === 'inbox' && (
-              <motion.div
-                key="inbox"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                className="absolute inset-0 p-6 overflow-y-auto scrollbar-hide space-y-4"
-              >
-                <h2 className="text-2xl font-bold text-[#2e2a27]">Counselor Inbox</h2>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-2xl border border-slate-200 p-3 space-y-2 max-h-[70vh] overflow-y-auto">
-                    {sortedEmailThreads.length === 0 && (
-                      <p className="text-center text-slate-400 text-sm py-6">No counselor emails yet.</p>
-                    )}
-                    {sortedEmailThreads.map(thread => (
-                      <button
-                        key={thread.id}
-                        onClick={() => setSelectedEmailThreadId(thread.id)}
-                        className={`w-full text-left p-3 rounded-xl border ${selectedEmailThreadId === thread.id ? 'border-[#8a6b5c] bg-[#f7f0eb]' : 'border-slate-200 bg-white'}`}
-                      >
-                        <p className="text-xs font-bold text-slate-700 truncate">{thread.subject}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{thread.messages[thread.messages.length - 1]?.body || 'No messages yet'}</p>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="lg:col-span-2 bg-slate-50 rounded-2xl border border-slate-200 p-4 flex flex-col">
-                    <div className="flex-1 space-y-3 overflow-y-auto">
-                      {selectedEmailThread?.messages.map(msg => (
-                        <div key={msg.id} className={`p-3 rounded-xl text-xs ${msg.senderEmail === user.email ? 'bg-[#8a6b5c] text-white ml-auto max-w-[80%]' : 'bg-white border border-slate-200 text-slate-700 max-w-[80%]'}`}>
-                          <div className="flex justify-between mb-1">
-                            <span className="font-bold">{msg.senderName}</span>
-                            <span className="text-[10px] opacity-70">{new Date(msg.timestamp).toLocaleString()}</span>
+                {tasks.filter(t => t.assignedBy !== 'system').length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="font-bold text-slate-600 text-base mb-3">Assigned by Counsellor (Legacy)</h3>
+                    <div className="space-y-4">
+                      {tasks.filter(t => t.assignedBy !== 'system').map(task => (
+                        <div key={task.id} onClick={() => toggleTask(task.id)} className={`p-4 rounded-2xl flex items-center gap-4 transition-all cursor-pointer ${task.isCompleted ? 'neu-pressed opacity-60' : 'neu-flat'}`}>
+                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.isCompleted ? 'border-[#8a6b5c] bg-[#8a6b5c]' : 'border-slate-400'}`}>
+                            {task.isCompleted && <CheckSquare size={14} className="text-white" />}
                           </div>
-                          <p>{msg.body}</p>
+                          <div>
+                            <h4 className={`font-bold ${task.isCompleted ? 'text-slate-400 line-through' : 'text-[#2e2a27]'}`}>{task.title}</h4>
+                            <p className="text-xs text-slate-400">Assigned by {task.assignedBy}</p>
+                          </div>
                         </div>
                       ))}
-                      {selectedEmailThread?.messages.length === 0 && (
-                        <p className="text-center text-xs text-slate-400">Select a thread to view messages.</p>
-                      )}
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <input
-                        value={emailReply}
-                        onChange={(e) => setEmailReply(e.target.value)}
-                        placeholder="Reply to counselor..."
-                        className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs"
-                      />
-                      <button onClick={handleEmailReplySend} className="px-4 py-2 text-xs font-bold bg-[#8a6b5c] text-white rounded-lg">
-                        Send
-                      </button>
                     </div>
                   </div>
-                </div>
+                )}
               </motion.div>
             )}
+
+        
 
             {/* ── SURVEYS TAB ───────────────────────────────────────── */}
             {activeTab === 'surveys' && (

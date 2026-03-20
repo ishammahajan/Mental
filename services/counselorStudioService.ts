@@ -5,6 +5,7 @@ import {
   query,
   setDoc,
   updateDoc,
+  deleteDoc,
   where,
   type Unsubscribe,
 } from 'firebase/firestore';
@@ -488,13 +489,24 @@ export const updateCounselorTaskCompletion = async (taskId: string, completedAt?
     ensureCounselorStudioSeeded();
     const tasks = localGet<CounselorTaskItem[]>(LOCAL_KEYS.TASKS, []);
     const updated = tasks.map(task => task.id === taskId
-      ? { ...task, completedAt: completedAt || null }
+      ? { ...task, completedAt: completedAt || undefined }
       : task
     );
     localSet(LOCAL_KEYS.TASKS, updated);
     return;
   }
   await updateDoc(doc(firestoreDb, TASKS, taskId), { completedAt: completedAt || null });
+};
+
+export const deleteCounselorTask = async (taskId: string): Promise<void> => {
+  if (isDemoMode()) {
+    ensureCounselorStudioSeeded();
+    const tasks = localGet<CounselorTaskItem[]>(LOCAL_KEYS.TASKS, []);
+    const updated = tasks.filter(task => task.id !== taskId);
+    localSet(LOCAL_KEYS.TASKS, updated);
+    return;
+  }
+  await deleteDoc(doc(firestoreDb, TASKS, taskId));
 };
 
 export const subscribeCounselorTasksForCounselor = (
